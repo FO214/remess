@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+
+# Build outputs (dist/ contains the final packaged app)
+dist/
+out/
+
+# IMPORTANT: build/ is NOT ignored - it contains source files like:
+# - build/icon.icns (app icon)
+# - build/entitlements.mac.plist (macOS permissions)
+# These are needed for building the app!
+
+# User-specific data
+avatars/
+contacts.csv
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Environment files (may contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# electron-builder cache
+.electron-builder-cache/
+
+# Coverage and testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Package manager lock files (optional - you can keep or remove)
+package-lock.json
+yarn.lock
+
+# macOS app metadata
+*.app/
