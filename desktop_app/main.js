@@ -294,5 +294,11 @@ ipcMain.handle('get-contact-reactions', async (event, contactHandle) => {
 
 // Install update now
 ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall(false, true);
+  log.info('Quitting and installing update...');
+  // Close all windows first
+  BrowserWindow.getAllWindows().forEach(window => window.close());
+  // Install update immediately
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(false, true);
+  });
 });

@@ -1,6 +1,6 @@
 {
   "name": "remess",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Your LIFE in text",
   "main": "main.js",
   "scripts": {
