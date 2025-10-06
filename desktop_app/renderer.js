@@ -122,7 +122,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.0.7';
+          versionTag.textContent = 'v0.1.0';
         }
       }
     }
@@ -154,22 +154,21 @@ function setupUpdateListeners() {
   
   // When update is available
   window.electronAPI.onUpdateAvailable((version) => {
-    updateVersion.textContent = `Remess v${version} is ready to install`;
+    updateVersion.textContent = `Remess v${version} is available!`;
     updateNotification.style.display = 'block';
-    updateProgress.style.display = 'block';
+    // Skip download progress, show button immediately
+    updateDownloaded.style.display = 'block';
+    updateNowBtn.style.display = 'block';
   });
   
-  // Update download progress
+  // Update download progress (hidden for unsigned builds)
   window.electronAPI.onUpdateProgress((percent) => {
-    progressFill.style.width = `${percent}%`;
-    progressText.textContent = `Downloading... ${percent}%`;
+    // Progress tracking not shown since manual download is required
   });
   
   // When update is downloaded
   window.electronAPI.onUpdateDownloaded(() => {
-    updateProgress.style.display = 'none';
-    updateDownloaded.style.display = 'block';
-    updateNowBtn.style.display = 'block';
+    // Already showing button from onUpdateAvailable
   });
   
   // Update now button

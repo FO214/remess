@@ -293,12 +293,14 @@ ipcMain.handle('get-contact-reactions', async (event, contactHandle) => {
 });
 
 // Install update now
-ipcMain.handle('install-update', () => {
-  log.info('Quitting and installing update...');
-  // Close all windows first
-  BrowserWindow.getAllWindows().forEach(window => window.close());
-  // Install update immediately
-  setImmediate(() => {
-    autoUpdater.quitAndInstall(false, true);
-  });
+ipcMain.handle('install-update', async () => {
+  log.info('Opening GitHub releases for manual update...');
+  // For unsigned builds, we can't auto-install, so open the releases page
+  await shell.openExternal('https://github.com/FO214/remess/releases/latest');
+  
+  // Give user time to see the browser open, then quit
+  setTimeout(() => {
+    log.info('Quitting app for manual update...');
+    app.quit();
+  }, 1500);
 });
