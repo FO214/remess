@@ -48,10 +48,8 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Open DevTools in development
-  if (process.argv.includes('--dev')) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Temporarily open DevTools in all builds for debugging
+  mainWindow.webContents.openDevTools();
 }
 
 // Auto-updater events

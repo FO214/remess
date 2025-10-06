@@ -105,24 +105,33 @@ const totalSlides = 7;
 
 // Initialize
 async function init() {
-  setupEventListeners();
-  checkAuthStatus();
-  
-  // Set version tag
-  if (window.electronAPI && window.electronAPI.getVersion) {
-    try {
-      const version = await window.electronAPI.getVersion();
-      const versionTag = document.getElementById('versionTag');
-      if (versionTag) {
-        versionTag.textContent = `v${version}`;
+  try {
+    setupEventListeners();
+    checkAuthStatus();
+    
+    // Set version tag
+    if (window.electronAPI && window.electronAPI.getVersion) {
+      try {
+        const version = await window.electronAPI.getVersion();
+        const versionTag = document.getElementById('versionTag');
+        if (versionTag) {
+          versionTag.textContent = `v${version}`;
+        }
+      } catch (error) {
+        console.error('Failed to get version:', error);
+        // Fallback to package version if available
+        const versionTag = document.getElementById('versionTag');
+        if (versionTag) {
+          versionTag.textContent = 'v0.0.5';
+        }
       }
-    } catch (error) {
-      console.error('Failed to get version:', error);
     }
+    
+    // Setup auto-update listeners
+    setupUpdateListeners();
+  } catch (error) {
+    console.error('Error during initialization:', error);
   }
-  
-  // Setup auto-update listeners
-  setupUpdateListeners();
 }
 
 // Setup auto-update listeners
@@ -1887,5 +1896,9 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Start the app
-init();
+// Start the app when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
