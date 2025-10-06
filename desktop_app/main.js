@@ -147,7 +147,8 @@ ipcMain.handle('check-disk-access', async () => {
 // Clone chat database
 ipcMain.handle('clone-database', async () => {
   try {
-    const success = dbHandler.cloneChatDatabase();
+    // Always skip contacts since we use imported CSV contacts
+    const success = dbHandler.cloneChatDatabase(true);
     return { success };
   } catch (error) {
     console.error('Database clone error:', error);
@@ -160,7 +161,8 @@ ipcMain.handle('get-stats', async () => {
   try {
     // Check if clone exists, if not create it
     if (!dbHandler.cloneExists()) {
-      const cloned = dbHandler.cloneChatDatabase();
+      // Always skip contacts since we use imported CSV contacts
+      const cloned = dbHandler.cloneChatDatabase(true);
       if (!cloned) {
         throw new Error('Failed to clone database');
       }

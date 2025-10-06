@@ -35,24 +35,34 @@ function checkFullDiskAccess() {
 /**
  * Create a clone of the chat.db file
  */
-function cloneChatDatabase() {
+function cloneChatDatabase(skipContacts = false) {
   try {
     // Create chatdata directory if it doesn't exist
     if (!fs.existsSync(APP_DATA_DIR)) {
       fs.mkdirSync(APP_DATA_DIR, { recursive: true });
     }
 
+    // Delete old clone if it exists to ensure it's not locked
+    if (fs.existsSync(CLONE_DB_PATH)) {
+      try {
+        fs.unlinkSync(CLONE_DB_PATH);
+      } catch (err) {
+        console.error('Could not delete old clone:', err.message);
+        // Try to continue anyway
+      }
+    }
+
     // Copy the database file
     fs.copyFileSync(CHAT_DB_PATH, CLONE_DB_PATH);
     
-    console.log('✅ Successfully cloned chat.db');
-    
-    // Also try to clone contacts database
-    cloneContactsDatabase();
+    // Also try to clone contacts database (only on initial setup, not on refresh)
+    if (!skipContacts) {
+      cloneContactsDatabase();
+    }
     
     return true;
   } catch (error) {
-    console.error('❌ Failed to clone chat.db:', error);
+    console.error('Failed to clone chat.db:', error);
     return false;
   }
 }

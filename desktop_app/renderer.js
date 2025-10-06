@@ -119,13 +119,32 @@ async function init() {
         }
       } catch (error) {
         console.error('Failed to get version:', error);
+        // Set fallback version
+        const versionTag = document.getElementById('versionTag');
+        if (versionTag) {
+          versionTag.textContent = 'v0.0.7';
+        }
       }
     }
     
     // Setup auto-update listeners
     setupUpdateListeners();
+    
+    // Hide app loading screen after everything is initialized
+    const appLoading = document.getElementById('appLoading');
+    if (appLoading) {
+      // Small delay to ensure smooth transition
+      setTimeout(() => {
+        appLoading.classList.add('hidden');
+      }, 300);
+    }
   } catch (error) {
     console.error('Error during initialization:', error);
+    // Hide loading screen even on error
+    const appLoading = document.getElementById('appLoading');
+    if (appLoading) {
+      appLoading.classList.add('hidden');
+    }
   }
 }
 
@@ -682,17 +701,15 @@ async function handleRefreshData() {
   // Add refreshing state
   refreshBtn.classList.add('refreshing');
   refreshBtn.disabled = true;
-  refreshBtn.querySelector('span').textContent = 'Refreshing...';
+  refreshBtn.title = 'Refreshing...';
   
   try {
-    
-    // Re-clone the database
+    // Re-clone the database (now skips contacts, should be fast)
     const cloneResult = await window.electronAPI.cloneDatabase();
     
     if (!cloneResult.success) {
       throw new Error(cloneResult.error || 'Failed to clone database');
     }
-    
     
     // Reload all data
     const result = await window.electronAPI.getStats();
@@ -711,7 +728,6 @@ async function handleRefreshData() {
       userData.messagesByYear = result.stats.messagesByYear;
       userData.topContacts = result.stats.topContacts;
       
-      
       // Reload available years
       await populateYearSelectors();
       
@@ -719,9 +735,9 @@ async function handleRefreshData() {
       await loadDashboardData();
       
       // Show success feedback
-      refreshBtn.querySelector('span').textContent = 'Refreshed!';
+      refreshBtn.title = 'Refreshed!';
       setTimeout(() => {
-        refreshBtn.querySelector('span').textContent = 'Refresh Data';
+        refreshBtn.title = 'Refresh data from iMessage';
       }, 2000);
       
     } else {
@@ -729,9 +745,9 @@ async function handleRefreshData() {
     }
     
   } catch (error) {
-    console.error('❌ Error refreshing data:', error);
+    console.error('Error refreshing data:', error);
     alert('Failed to refresh data. Please try again.');
-    refreshBtn.querySelector('span').textContent = 'Refresh Data';
+    refreshBtn.title = 'Refresh data from iMessage';
   } finally {
     refreshBtn.classList.remove('refreshing');
     refreshBtn.disabled = false;

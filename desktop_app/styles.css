@@ -26,6 +26,49 @@ body {
   height: 100vh;
 }
 
+/* ============================================
+   APP LOADING SCREEN
+   ============================================ */
+.app-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--off-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.app-loading.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-loading-icon {
+  animation: float 2.5s ease-in-out infinite;
+}
+
+.loading-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.1));
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
 /* LANDING PAGE */
 .landing-container {
   display: flex;
