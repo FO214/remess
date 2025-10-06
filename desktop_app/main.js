@@ -7,6 +7,9 @@ const log = require('electron-log');
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
 
+// For unsigned builds, users will need to manually download updates
+// or use the "Remove quarantine" workaround for each update
+
 const { authenticateWithAuth0 } = require('./auth-auth0');
 const dbHandler = require('./db-handler');
 
@@ -93,9 +96,16 @@ app.whenReady().then(() => {
   createWindow();
   
   // Check for updates after window is created (wait 3 seconds)
-  setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify();
-  }, 3000);
+  // Only check for updates in production builds
+  if (!app.isPackaged) {
+    log.info('Running in development mode - skipping update check');
+  } else {
+    log.info('Running in production mode - checking for updates');
+    setTimeout(() => {
+      log.info('Checking for updates...');
+      autoUpdater.checkForUpdatesAndNotify();
+    }, 3000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

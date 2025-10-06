@@ -1,6 +1,6 @@
 {
   "name": "remess",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Your LIFE in text",
   "main": "main.js",
   "scripts": {
@@ -64,11 +64,7 @@
         "zip"
       ],
       "category": "public.app-category.utilities",
-      "darkModeSupport": true,
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "darkModeSupport": true
     },
     "dmg": {
       "title": "${productName} ${version}",
