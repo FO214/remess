@@ -6,11 +6,6 @@
   
   <p><strong>A beautiful app that turns your iMessage data into fun, insightful stats.</strong></p>
   
-  <p>
-    <img src="https://img.shields.io/github/v/release/FO214/remess?style=flat-square" alt="Release" />
-    <img src="https://img.shields.io/github/license/FO214/remess?style=flat-square" alt="License" />
-  </p>
-  
   ---
   
   <p>Ever wondered who you text the most? What year you went OFF?<br/>
