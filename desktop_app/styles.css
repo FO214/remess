@@ -223,11 +223,11 @@ body {
   padding: 8px 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  min-width: 180px;
-  max-width: 200px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .update-icon {
@@ -235,7 +235,8 @@ body {
 }
 
 .update-text {
-  flex: 1;
+  flex: 0 0 auto;
+  line-height: 1;
 }
 
 .update-text h3 {
@@ -245,8 +246,9 @@ body {
 .update-text p {
   font-size: 11px;
   color: var(--dark-gray);
-  line-height: 1.4;
+  line-height: 1;
   font-weight: 500;
+  margin: 0;
 }
 
 .update-progress {
@@ -272,13 +274,13 @@ body {
 .update-actions {
   display: flex;
   gap: 4px;
-  margin-top: 0;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .update-btn-primary,
 .update-btn-secondary {
-  flex: 1;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
@@ -286,6 +288,7 @@ body {
   transition: all 0.12s ease;
   border: none;
   outline: none;
+  white-space: nowrap;
 }
 
 .update-btn-primary {
