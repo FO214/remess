@@ -119,11 +119,6 @@ async function init() {
         }
       } catch (error) {
         console.error('Failed to get version:', error);
-        // Fallback to package version if available
-        const versionTag = document.getElementById('versionTag');
-        if (versionTag) {
-          versionTag.textContent = 'v0.0.5';
-        }
       }
     }
     
@@ -140,7 +135,6 @@ function setupUpdateListeners() {
   
   // When update is available
   window.electronAPI.onUpdateAvailable((version) => {
-    console.log('Update available:', version);
     updateVersion.textContent = `Remess v${version} is ready to install`;
     updateNotification.style.display = 'block';
     updateProgress.style.display = 'block';
@@ -148,14 +142,12 @@ function setupUpdateListeners() {
   
   // Update download progress
   window.electronAPI.onUpdateProgress((percent) => {
-    console.log('Update progress:', percent);
     progressFill.style.width = `${percent}%`;
     progressText.textContent = `Downloading... ${percent}%`;
   });
   
   // When update is downloaded
   window.electronAPI.onUpdateDownloaded(() => {
-    console.log('Update downloaded');
     updateProgress.style.display = 'none';
     updateDownloaded.style.display = 'block';
     updateNowBtn.style.display = 'block';
@@ -163,7 +155,6 @@ function setupUpdateListeners() {
   
   // Update now button
   updateNowBtn.addEventListener('click', async () => {
-    console.log('Installing update now...');
     await window.electronAPI.installUpdate();
   });
   
@@ -225,14 +216,11 @@ function setupEventListeners() {
     const file = event.target.files[0];
     if (!file) return;
     
-    console.log('📁 File selected:', file.name, file.type, file.size);
     
     try {
       const text = await file.text();
-      console.log('📄 File text length:', text.length);
       
       const contacts = parseVCard(text);
-      console.log(`✅ Parsed ${contacts.length} contacts`);
       
       if (contacts.length === 0) {
         alert('No contacts found in file. Please make sure you exported contacts as vCard format.');
@@ -245,7 +233,6 @@ function setupEventListeners() {
       // Save contacts to CSV file
       const saveResult = await window.electronAPI.saveContacts(contacts);
       if (saveResult.success) {
-        console.log('✅ Contacts saved to CSV:', saveResult.path);
       } else {
         console.error('❌ Failed to save contacts:', saveResult.error);
       }
@@ -317,7 +304,6 @@ function setupEventListeners() {
 async function handleGetStarted() {
   if (isAuthenticated && userData) {
     // User is already signed in, auto-load data
-    console.log('🚀 User already authenticated, loading data...');
     landingContainer.style.display = 'none';
     loadingContainer.style.display = 'flex';
     
@@ -367,11 +353,9 @@ function checkAuthStatus() {
       
       if (tokenAge < maxAge) {
         // Tokens are still valid, user is authenticated
-        console.log('✅ User session is valid');
         isAuthenticated = true;
       } else {
         // Tokens expired, clear them
-        console.log('⚠️ Auth tokens expired, requiring sign-in');
         localStorage.removeItem('remess_user');
         localStorage.removeItem('remess_auth_tokens');
         localStorage.removeItem('remess_seen_wrapped');
@@ -402,13 +386,11 @@ async function handleGoogleSignIn() {
       // Real Google OAuth
       const result = await window.electronAPI.signInWithGoogle();
       
-      console.log('🔐 Auth result:', result);
       
       if (result.success) {
         // Get user data from Auth0 result
         const authUser = result.data.user; // The user object from auth-auth0.js
         const tokens = result.data.tokens; // The tokens from Auth0
-        console.log('👤 Auth user data:', authUser);
         
         userData = {
           name: authUser?.name || authUser?.email || 'User',
@@ -417,7 +399,6 @@ async function handleGoogleSignIn() {
         };
         isAuthenticated = true;
         
-        console.log('💾 Saving user data and tokens:', userData);
         
         // Save to localStorage with timestamp
         localStorage.setItem('remess_user', JSON.stringify(userData));
@@ -466,7 +447,6 @@ async function checkAndLoadData() {
       
       if (contactsResult.success && contactsResult.contacts.length > 0) {
         // Contacts already imported, store in localStorage and proceed
-        console.log(`✅ Found existing contacts CSV with ${contactsResult.contacts.length} contacts`);
         localStorage.setItem('remess_contacts', JSON.stringify(contactsResult.contacts));
         
         // Skip import screen and go straight to loading
@@ -557,20 +537,17 @@ function parseVCard(vcardText) {
     }
   }
   
-  console.log(`📸 Parsed ${contacts.filter(c => c.photo).length} contacts with photos out of ${contacts.length} total`);
   return contacts;
 }
 
 // Load real data from database
 async function loadRealData() {
   try {
-    console.log('🔄 Loading real data...');
     
     // Fetch stats from database
     const result = await window.electronAPI.getStats();
     
     if (result.success && result.stats) {
-      console.log('✅ Stats loaded successfully');
       
       // Update userData with real stats
       userData.stats = {
@@ -586,17 +563,14 @@ async function loadRealData() {
       userData.topContacts = result.stats.topContacts;
       
       // Preload contacts data before showing any UI
-      console.log('📇 Preloading contacts data...');
       let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
       if (importedContacts.length === 0) {
         const loadResult = await window.electronAPI.loadContacts();
         if (loadResult.success && loadResult.contacts.length > 0) {
           importedContacts = loadResult.contacts;
           localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
-          console.log(`✅ Preloaded ${importedContacts.length} contacts from CSV`);
         }
       } else {
-        console.log(`✅ Using ${importedContacts.length} contacts from localStorage`);
       }
       
       // Store contacts globally so they're ready
@@ -605,7 +579,6 @@ async function loadRealData() {
       // Small delay to ensure everything is ready
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      console.log('✅ All data loaded, showing wrapped experience');
       // Show wrapped experience with real data
       showWrappedExperience();
     } else {
@@ -672,7 +645,6 @@ function handleSignOut() {
   // Clear global contacts cache
   window.remessContacts = null;
   
-  console.log('👋 User signed out');
   
   // Close dropdown
   userProfile.classList.remove('active');
@@ -713,20 +685,16 @@ async function handleRefreshData() {
   refreshBtn.querySelector('span').textContent = 'Refreshing...';
   
   try {
-    console.log('🔄 Starting data refresh...');
     
     // Re-clone the database
-    console.log('📦 Cloning database...');
     const cloneResult = await window.electronAPI.cloneDatabase();
     
     if (!cloneResult.success) {
       throw new Error(cloneResult.error || 'Failed to clone database');
     }
     
-    console.log('✅ Database cloned successfully');
     
     // Reload all data
-    console.log('📊 Reloading stats...');
     const result = await window.electronAPI.getStats();
     
     if (result.success && result.stats) {
@@ -743,7 +711,6 @@ async function handleRefreshData() {
       userData.messagesByYear = result.stats.messagesByYear;
       userData.topContacts = result.stats.topContacts;
       
-      console.log('✅ Data refreshed successfully');
       
       // Reload available years
       await populateYearSelectors();
@@ -784,7 +751,7 @@ function showWrappedExperience() {
   // Reset to first slide
   currentSlide = 0;
   updateSlides();
-  updateProgress();
+  updateWrappedProgress();
   updateNavigationButtons();
   
   // Load wrapped data with delay for animations
@@ -806,7 +773,6 @@ async function loadWrappedData() {
   
   // Use preloaded contacts
   const importedContacts = window.remessContacts || [];
-  console.log(`📇 Using ${importedContacts.length} preloaded contacts for wrapped data`);
   
   // Helper function to get display name and photo for a contact
   function getContactInfo(contact) {
@@ -835,7 +801,6 @@ async function loadWrappedData() {
       if (match) {
         displayName = match.name;
         contactPhoto = match.photo || null;
-        console.log(`✅ Wrapped: Matched ${contact.contact} -> ${match.name}`, contactPhoto ? '(with photo)' : '');
       }
     }
     
@@ -879,7 +844,7 @@ function navigateSlide(direction) {
   if (newSlide >= 0 && newSlide < totalSlides) {
     currentSlide = newSlide;
     updateSlides();
-    updateProgress();
+    updateWrappedProgress();
     updateNavigationButtons();
   }
 }
@@ -899,8 +864,8 @@ function updateSlides() {
   });
 }
 
-// Update progress bar
-function updateProgress() {
+// Update wrapped progress bar
+function updateWrappedProgress() {
   const progress = ((currentSlide + 1) / totalSlides) * 100;
   progressBar.style.width = `${progress}%`;
 }
@@ -931,7 +896,6 @@ function showDashboard() {
   const displayName = userData?.name || userData?.email || 'User';
   userName.textContent = displayName;
   
-  console.log('👤 Setting user profile:', {
     name: displayName,
     avatar: userData?.avatar,
     hasAvatar: !!userData?.avatar
@@ -944,12 +908,10 @@ function showDashboard() {
     userAvatar.style.objectFit = 'cover';
     userAvatar.onerror = function() {
       // Fallback: hide image and show initials in CSS
-      console.log('⚠️ Avatar failed to load, using fallback');
       this.style.display = 'none';
     };
   } else {
     // No avatar provided
-    console.log('ℹ️ No avatar provided');
     userAvatar.style.display = 'none';
   }
   
@@ -984,7 +946,6 @@ async function loadDashboardData() {
   animateValue('receivedMessages', 0, receivedMsgs, 1500);
   
   // Verify consistency
-  console.log('📊 Message counts:', {
     total: totalMsgs,
     sent: sentMsgs,
     received: receivedMsgs,
@@ -1152,7 +1113,6 @@ function createMessagesOverTimeChart(messagesByYearData) {
         if (activeElements.length > 0) {
           const clickedIndex = activeElements[0].index;
           const clickedYear = years[clickedIndex];
-          console.log(`📅 Clicked on year: ${clickedYear}`);
           
           // Update the year selector for top contacts
           const yearSelector = document.getElementById('topContactsYearSelector');
@@ -1174,24 +1134,20 @@ async function renderTopContacts(topContactsData) {
   
   const contacts = topContactsData;
   
-  console.log('📇 Rendering contacts:', contacts.length, 'total');
   
   // Load imported contacts from localStorage or CSV
   let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
   
   // If not in localStorage, try loading from CSV
   if (importedContacts.length === 0) {
-    console.log('📂 No contacts in localStorage, trying CSV...');
     const loadResult = await window.electronAPI.loadContacts();
     if (loadResult.success && loadResult.contacts.length > 0) {
       importedContacts = loadResult.contacts;
       // Store in localStorage for faster access
       localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
-      console.log(`✅ Loaded ${importedContacts.length} contacts from CSV`);
     }
   }
   
-  console.log(`📇 Imported contacts available: ${importedContacts.length}`);
   
   // First pass: match contacts to names
   const matchedContacts = contacts.map((contact, index) => {
@@ -1220,7 +1176,6 @@ async function renderTopContacts(topContactsData) {
       if (match) {
         displayName = match.name;
         contactPhoto = match.photo || null;
-        console.log(`✅ Matched ${contact.contact} -> ${match.name}`, contactPhoto ? '(with photo)' : '');
       }
     }
     
@@ -1255,7 +1210,6 @@ async function renderTopContacts(topContactsData) {
   const allConsolidatedContacts = Array.from(consolidatedMap.values())
     .sort((a, b) => b.messageCount - a.messageCount);
   
-  console.log(`📊 Consolidated ${matchedContacts.length} entries into ${allConsolidatedContacts.length} unique contacts`);
   
   // Store all contacts globally for "Load More" functionality
   window.allTopContacts = allConsolidatedContacts;
@@ -1492,7 +1446,6 @@ async function populateYearSelectors() {
         topContactsYearSelector.appendChild(option);
       });
       
-      console.log(`✅ Loaded ${result.years.length} years for filtering`);
     }
   } catch (error) {
     console.error('Error loading available years:', error);
@@ -1506,7 +1459,6 @@ async function handleTopContactsYearChange(year) {
     
     if (year) {
       // Get contacts for specific year
-      console.log(`📅 Loading top contacts for ${year}`);
       const result = await window.electronAPI.getTopContactsByYear(year);
       if (result.success) {
         topContactsData = result.contacts;
@@ -1516,7 +1468,6 @@ async function handleTopContactsYearChange(year) {
       }
     } else {
       // Get all-time contacts
-      console.log('📅 Loading all-time top contacts');
       topContactsData = userData.topContacts;
     }
     
@@ -1532,7 +1483,6 @@ async function handleContactDetailYearChange(year) {
   if (!currentContactHandle) return;
   
   try {
-    console.log(`📅 Loading contact stats${year ? ` for ${year}` : ' for all time'}`);
     const result = await window.electronAPI.getContactStats(currentContactHandle, year || null);
     
     if (result.success && result.stats) {
@@ -1556,7 +1506,6 @@ async function handleContactDetailYearChange(year) {
 
 // Show contact detail view
 async function showContactDetail(contact) {
-  console.log('📱 Showing detail for contact:', contact);
   
   // Store current contact handles (can be multiple for consolidated contacts)
   currentContactHandle = contact.handles || [contact.handle];
@@ -1627,7 +1576,6 @@ async function showContactDetail(contact) {
     let result;
     if (Array.isArray(currentContactHandle) && currentContactHandle.length > 1) {
       // Multiple handles - get combined stats
-      console.log(`📊 Loading combined stats for ${currentContactHandle.length} handles`);
       result = await window.electronAPI.getContactStats(currentContactHandle);
     } else {
       // Single handle
@@ -1844,7 +1792,6 @@ async function handleMessageSearch() {
   }
   
   try {
-    console.log(`🔍 Searching for "${searchTerm}"`);
     
     const result = await window.electronAPI.searchContactMessages(currentContactHandle, searchTerm);
     
