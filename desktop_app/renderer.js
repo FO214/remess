@@ -122,7 +122,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.2';
+          versionTag.textContent = 'v0.1.3';
         }
       }
     }
@@ -154,10 +154,8 @@ function setupUpdateListeners() {
   
   // When update is available
   window.electronAPI.onUpdateAvailable((version) => {
-    updateVersion.textContent = `Remess v${version} is available!`;
+    updateVersion.textContent = `v${version} available`;
     updateNotification.style.display = 'block';
-    // Skip download progress, show button immediately
-    updateDownloaded.style.display = 'block';
     updateNowBtn.style.display = 'block';
   });
   
