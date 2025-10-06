@@ -896,11 +896,6 @@ function showDashboard() {
   const displayName = userData?.name || userData?.email || 'User';
   userName.textContent = displayName;
   
-    name: displayName,
-    avatar: userData?.avatar,
-    hasAvatar: !!userData?.avatar
-  });
-  
   // Set Auth0 profile picture
   if (userData?.avatar) {
     userAvatar.src = userData.avatar;
@@ -944,14 +939,6 @@ async function loadDashboardData() {
   animateValue('avgMessages', 0, stats.avgMessagesPerDay || stats.avgPerDay, 1500);
   animateValue('sentMessages', 0, sentMsgs, 1500);
   animateValue('receivedMessages', 0, receivedMsgs, 1500);
-  
-  // Verify consistency
-    total: totalMsgs,
-    sent: sentMsgs,
-    received: receivedMsgs,
-    sum: sentMsgs + receivedMsgs,
-    match: totalMsgs === (sentMsgs + receivedMsgs)
-  });
   
   document.getElementById('mostActiveYear').textContent = stats.mostActiveYear;
   document.getElementById('mostActiveYearCount').textContent = 
