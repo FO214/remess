@@ -11,15 +11,21 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-snap-type: none;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
   background: var(--off-white);
   color: var(--black);
   overflow-x: hidden;
-}
-
-html {
-  scroll-snap-type: none;
+  width: 100%;
+  max-width: 100vw;
+  position: relative;
 }
 
 /* Landing Container */
@@ -29,6 +35,9 @@ html {
   flex-direction: column;
   align-items: center;
   padding: 0;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Floating Bubbles */
@@ -144,7 +153,7 @@ html {
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 32px;
-  padding: 60px 40px 100px;
+  padding: 60px 40px 80px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
 }
 
@@ -236,6 +245,7 @@ html {
 
 .compatibility-note {
   margin-top: 16px;
+  margin-bottom: 60px;
   font-size: 14px;
   color: var(--black);
   opacity: 0.6;
@@ -244,7 +254,7 @@ html {
 /* Scroll Indicator */
 .scroll-indicator {
   position: absolute;
-  bottom: 32px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -488,15 +498,23 @@ html {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .hero-section,
-  .setup-container {
-    padding: 40px 24px;
+  .hero-content {
+    padding: 40px 30px 60px;
     border-radius: 24px;
+    width: calc(100% - 32px);
+  }
+
+  .setup-container {
+    padding: 40px 30px;
+    border-radius: 24px;
+    width: calc(100% - 32px);
+    margin: 0 16px 40px;
   }
 
   .landing-logo {
     width: 80px;
     height: 80px;
+    margin-bottom: 20px;
   }
 
   .landing-title {
@@ -509,15 +527,35 @@ html {
 
   .landing-description {
     font-size: 16px;
+    margin-bottom: 32px;
   }
 
   .download-button {
     padding: 16px 28px;
     font-size: 16px;
+    gap: 10px;
+  }
+
+  .compatibility-note {
+    font-size: 13px;
+    margin-bottom: 50px;
+  }
+
+  .scroll-indicator {
+    bottom: 12px;
+  }
+
+  .scroll-indicator span {
+    font-size: 13px;
   }
 
   .setup-title {
-    font-size: 26px;
+    font-size: 28px;
+    margin-bottom: 32px;
+  }
+
+  .setup-steps {
+    gap: 28px;
   }
 
   .setup-step {
@@ -539,35 +577,221 @@ html {
   }
 
   .code-block {
-    flex-direction: column;
-    align-items: stretch;
+    gap: 8px;
+    padding: 14px;
+    font-size: 13px;
   }
 
   .code-block code {
     overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .copy-button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .privacy-note {
+    flex-direction: column;
+    text-align: center;
+    padding: 14px 18px;
+    font-size: 13px;
+  }
+
+  .landing-footer {
+    margin-top: 40px;
+    padding-top: 24px;
+  }
+
+  .footer-links {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .footer-links span {
+    display: none;
   }
 }
 
 @media (max-width: 480px) {
-  .landing-container {
-    padding: 20px 16px;
+  .hero-section {
+    height: calc(100vh - 20px);
   }
 
-  .hero-section,
+  .hero-content {
+    padding: 32px 24px 50px;
+    border-radius: 20px;
+    width: calc(100% - 24px);
+  }
+
   .setup-container {
-    padding: 32px 20px;
+    padding: 32px 24px;
+    border-radius: 20px;
+    width: calc(100% - 24px);
+    margin: 0 12px 32px;
+  }
+
+  .landing-logo {
+    width: 70px;
+    height: 70px;
+    margin-bottom: 16px;
   }
 
   .landing-title {
     font-size: 32px;
+    margin-bottom: 12px;
   }
 
   .landing-subtitle {
     font-size: 20px;
+    margin-bottom: 12px;
+  }
+
+  .landing-description {
+    font-size: 15px;
+    margin-bottom: 28px;
+  }
+
+  .download-button {
+    padding: 14px 24px;
+    font-size: 15px;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .download-button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .compatibility-note {
+    font-size: 12px;
+    margin-top: 12px;
+    margin-bottom: 45px;
+  }
+
+  .scroll-indicator {
+    bottom: 10px;
+  }
+
+  .scroll-indicator span {
+    font-size: 11px;
+  }
+
+  .scroll-indicator svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .setup-title {
+    font-size: 24px;
+    margin-bottom: 24px;
+  }
+
+  .setup-steps {
+    gap: 24px;
+  }
+
+  .setup-step {
+    gap: 12px;
+  }
+
+  .step-number {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .step-content h3 {
+    font-size: 17px;
+    margin-bottom: 6px;
+  }
+
+  .step-content p {
+    font-size: 14px;
+  }
+
+  .step-detail {
+    font-size: 13px !important;
+  }
+
+  .step-list li {
+    font-size: 14px;
+    padding: 6px 0 6px 20px;
+  }
+
+  .code-block {
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .copy-button {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  .privacy-note {
+    padding: 12px 16px;
+    font-size: 12px;
+    margin-top: 32px;
+  }
+
+  .landing-footer {
+    margin-top: 32px;
+    padding-top: 20px;
+  }
+
+  .landing-footer p {
+    font-size: 13px;
+  }
+
+  .footer-links {
+    font-size: 13px;
   }
 
   .bubble {
-    font-size: 12px;
-    padding: 10px 16px;
+    font-size: 11px;
+    padding: 8px 14px;
+    border-radius: 20px;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 360px) {
+  .hero-content {
+    padding: 28px 20px 45px;
+  }
+
+  .setup-container {
+    padding: 28px 20px;
+  }
+
+  .landing-title {
+    font-size: 28px;
+  }
+
+  .landing-subtitle {
+    font-size: 18px;
+  }
+
+  .landing-description {
+    font-size: 14px;
+  }
+
+  .download-button {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+
+  .setup-title {
+    font-size: 22px;
+  }
+
+  .bubble {
+    font-size: 10px;
+    padding: 7px 12px;
   }
 }
