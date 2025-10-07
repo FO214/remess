@@ -25,5 +25,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchContactMessages: (contactHandle, searchTerm, limit, offset, filter) => ipcRenderer.invoke('search-contact-messages', contactHandle, searchTerm, limit, offset, filter),
   getContactReactions: (contactHandle) => ipcRenderer.invoke('get-contact-reactions', contactHandle),
   getAllWords: (limit) => ipcRenderer.invoke('get-all-words', limit),
-  getContactWordsFiltered: (contactHandle, filter, limit) => ipcRenderer.invoke('get-contact-words-filtered', contactHandle, filter, limit)
+  getContactWordsFiltered: (contactHandle, filter, limit) => ipcRenderer.invoke('get-contact-words-filtered', contactHandle, filter, limit),
+  getTopGroupChats: (limit) => ipcRenderer.invoke('get-top-group-chats', limit),
+  getTopGroupChatsByYear: (year, limit) => ipcRenderer.invoke('get-top-group-chats-by-year', year, limit),
+  getGroupChatStats: (chatId, year) => ipcRenderer.invoke('get-group-chat-stats', chatId, year),
+  getGroupChatParticipants: (chatId, year) => ipcRenderer.invoke('get-group-chat-participants', chatId, year),
+  getGroupChatWords: (chatId, limit, personId, year) => ipcRenderer.invoke('get-group-chat-words', chatId, limit, personId, year),
+  getGroupChatEmojis: (chatId, limit, personId, year) => ipcRenderer.invoke('get-group-chat-emojis', chatId, limit, personId, year),
+  searchGroupChatMessages: (chatId, searchTerm, limit, offset, personId) => ipcRenderer.invoke('search-group-chat-messages', chatId, searchTerm, limit, offset, personId),
+  getGroupChatReactions: (chatId, personId, year) => ipcRenderer.invoke('get-group-chat-reactions', chatId, personId, year)
 });

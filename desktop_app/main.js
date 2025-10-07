@@ -270,6 +270,94 @@ ipcMain.handle('get-top-contacts-by-year', async (event, year) => {
   }
 });
 
+// Get top group chats
+ipcMain.handle('get-top-group-chats', async (event, limit = null) => {
+  try {
+    const groupChats = dbHandler.getTopGroupChats(limit);
+    return { success: true, groupChats };
+  } catch (error) {
+    console.error('Error getting top group chats:', error);
+    return { success: false, error: error.message, groupChats: [] };
+  }
+});
+
+// Get top group chats by year
+ipcMain.handle('get-top-group-chats-by-year', async (event, year, limit = null) => {
+  try {
+    const groupChats = dbHandler.getTopGroupChatsByYear(year, limit);
+    return { success: true, groupChats };
+  } catch (error) {
+    console.error('Error getting top group chats by year:', error);
+    return { success: false, error: error.message, groupChats: [] };
+  }
+});
+
+// Get group chat stats
+ipcMain.handle('get-group-chat-stats', async (event, chatId, year = null) => {
+  try {
+    const stats = dbHandler.getGroupChatStats(chatId, year);
+    return { success: true, stats };
+  } catch (error) {
+    console.error('Error getting group chat stats:', error);
+    return { success: false, error: error.message, stats: null };
+  }
+});
+
+// Get group chat participants
+ipcMain.handle('get-group-chat-participants', async (event, chatId, year = null) => {
+  try {
+    const participants = dbHandler.getGroupChatParticipants(chatId, year);
+    return { success: true, participants };
+  } catch (error) {
+    console.error('Error getting group chat participants:', error);
+    return { success: false, error: error.message, participants: [] };
+  }
+});
+
+// Get group chat words
+ipcMain.handle('get-group-chat-words', async (event, chatId, limit = 20, personId = null, year = null) => {
+  try {
+    const words = dbHandler.getGroupChatWords(chatId, limit, personId, year);
+    return { success: true, words };
+  } catch (error) {
+    console.error('Error getting group chat words:', error);
+    return { success: false, error: error.message, words: [] };
+  }
+});
+
+// Get group chat emojis
+ipcMain.handle('get-group-chat-emojis', async (event, chatId, limit = 10, personId = null, year = null) => {
+  try {
+    const emojis = dbHandler.getGroupChatEmojis(chatId, limit, personId, year);
+    return { success: true, emojis };
+  } catch (error) {
+    console.error('Error getting group chat emojis:', error);
+    return { success: false, error: error.message, emojis: [] };
+  }
+});
+
+// Search group chat messages
+ipcMain.handle('search-group-chat-messages', async (event, chatId, searchTerm, limit = 10, offset = 0, personId = null) => {
+  try {
+    const result = dbHandler.searchGroupChatMessages(chatId, searchTerm, limit, offset, personId);
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Error searching group chat messages:', error);
+    return { success: false, error: error.message, count: 0, examples: [] };
+  }
+});
+
+// Get group chat reactions
+ipcMain.handle('get-group-chat-reactions', async (event, chatId, personId = null, year = null) => {
+  try {
+    const reactions = dbHandler.getGroupChatReactions(chatId, personId, year);
+    return { success: true, ...reactions };
+  } catch (error) {
+    console.error('Error getting group chat reactions:', error);
+    return { success: false, error: error.message, yourReactions: [], theirReactions: [] };
+  }
+});
+
 // Search contact messages
 ipcMain.handle('search-contact-messages', async (event, contactHandle, searchTerm, limit = 10, offset = 0, filter = 'both') => {
   try {
