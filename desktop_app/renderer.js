@@ -1272,9 +1272,15 @@ async function renderTopContacts(topContactsData) {
   
   // Store all contacts globally for "Load More" functionality
   window.allTopContacts = allConsolidatedContacts;
-  window.currentContactsShown = Math.min(10, allConsolidatedContacts.length);
   
-  // Show only the first 10 (or fewer if less available)
+  // Use previous count if it exists, otherwise start with 10
+  if (window.currentContactsShown === undefined || window.currentContactsShown > allConsolidatedContacts.length) {
+    window.currentContactsShown = Math.min(10, allConsolidatedContacts.length);
+  } else {
+    window.currentContactsShown = Math.min(window.currentContactsShown, allConsolidatedContacts.length);
+  }
+  
+  // Show contacts up to current count
   const contactsToShow = allConsolidatedContacts.slice(0, window.currentContactsShown);
   
   // Now render the contacts
@@ -1355,6 +1361,80 @@ async function renderTopContacts(topContactsData) {
 
 // Load more contacts
 function loadMoreContacts() {
+  // Check if we're in groups view or DMs view
+  const activeFilter = document.querySelector('.filter-button-group .filter-btn.active[data-filter-type="chat-type"]');
+  const isGroupsView = activeFilter && activeFilter.dataset.filter === 'groups';
+  
+  if (isGroupsView) {
+    // Load more group chats
+    if (!window.allTopGroupChats) return;
+    
+    const container = document.getElementById('topContactsList');
+    const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
+    
+    // Load 10 more group chats
+    const currentCount = window.currentGroupChatsShown;
+    const newCount = Math.min(currentCount + 10, window.allTopGroupChats.length);
+    const newGroupChats = window.allTopGroupChats.slice(currentCount, newCount);
+    
+    // Render new group chats
+    newGroupChats.forEach((groupChat, i) => {
+      const index = currentCount + i;
+      const groupElement = document.createElement('div');
+      groupElement.className = 'contact-item';
+      
+      // Use initials if available, otherwise generic group icon
+      let avatarHTML;
+      if (groupChat.avatarInitials) {
+        avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">${groupChat.avatarInitials}</div>`;
+      } else {
+        avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">👥</div>`;
+      }
+      
+      groupElement.innerHTML = `
+        <div class="contact-left">
+          <div class="contact-rank">${index + 1}</div>
+          ${avatarHTML}
+          <div class="contact-info-item">
+            <h4>${groupChat.displayName}</h4>
+            <p>${groupChat.messageCount.toLocaleString()} texts · ${groupChat.participantCount} people</p>
+          </div>
+        </div>
+        <div class="contact-count">${groupChat.messageCount.toLocaleString()}</div>
+      `;
+      
+      // Add click handler to show group chat detail
+      groupElement.addEventListener('click', () => {
+        showGroupChatDetail(groupChat);
+      });
+      
+      // Stagger animation
+      groupElement.style.opacity = '0';
+      groupElement.style.transform = 'translateX(-20px)';
+      
+      setTimeout(() => {
+        groupElement.style.transition = 'all 0.4s ease';
+        groupElement.style.opacity = '1';
+        groupElement.style.transform = 'translateX(0)';
+      }, i * 100);
+      
+      container.appendChild(groupElement);
+    });
+    
+    // Update count
+    window.currentGroupChatsShown = newCount;
+    
+    // Update or hide button
+    if (newCount < window.allTopGroupChats.length) {
+      loadMoreBtn.querySelector('span').textContent = 'Load More';
+    } else {
+      loadMoreBtn.style.display = 'none';
+    }
+    
+    return;
+  }
+  
+  // Load more DM contacts
   if (!window.allTopContacts) return;
   
   const container = document.getElementById('topContactsList');
@@ -1485,6 +1565,603 @@ function formatPhoneNumber(phone) {
 }
 
 // ============================================
+// GROUP CHATS
+// ============================================
+
+// Handle chat type change (DMs vs Groups)
+async function handleChatTypeChange(chatType) {
+  // Update title and subtitle
+  const title = document.getElementById('topPeopleTitle');
+  const subtitle = document.getElementById('topPeopleSubtitle');
+  const yearSelector = document.getElementById('topContactsYearSelector');
+  
+  if (chatType === 'groups') {
+    title.textContent = 'Your Top Group Chats';
+    subtitle.textContent = 'The groups you text in most';
+    
+    // Get current year filter
+    const year = yearSelector.value;
+    
+    // Load group chats
+    try {
+      let result;
+      if (year) {
+        result = await window.electronAPI.getTopGroupChatsByYear(year);
+      } else {
+        result = await window.electronAPI.getTopGroupChats();
+      }
+      
+      if (result.success) {
+        await renderGroupChats(result.groupChats);
+      }
+    } catch (error) {
+      console.error('Error loading group chats:', error);
+    }
+  } else {
+    // DMs
+    title.textContent = 'Your Top People';
+    subtitle.textContent = 'Who you text the most';
+    
+    // Reload contacts
+    const year = yearSelector.value;
+    if (year) {
+      await handleTopContactsYearChange(year);
+    } else {
+      renderTopContacts(userData.topContacts);
+    }
+  }
+}
+
+// Render group chats
+async function renderGroupChats(groupChatsData) {
+  const container = document.getElementById('topContactsList');
+  container.innerHTML = '';
+  
+  if (!groupChatsData || groupChatsData.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: var(--medium-gray); padding: 40px;">No group chats found</p>';
+    document.getElementById('loadMoreContactsBtn').style.display = 'none';
+    return;
+  }
+  
+  // Load imported contacts for name/photo matching
+  let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
+  if (importedContacts.length === 0) {
+    const loadResult = await window.electronAPI.loadContacts();
+    if (loadResult.success && loadResult.contacts.length > 0) {
+      importedContacts = loadResult.contacts;
+      localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
+    }
+  }
+  
+  // Enhance group chats with participant names and initials
+  const enhancedGroupChats = groupChatsData.map(groupChat => {
+    let displayName = groupChat.displayName;
+    let avatarInitials = null;
+    
+    // If there's already a display name, use it for initials
+    if (displayName) {
+      const words = displayName.split(' ').filter(w => w.length > 0);
+      if (words.length > 0) {
+        const initialsCount = Math.min(2, words.length);
+        avatarInitials = words.slice(0, initialsCount)
+          .map(word => word.charAt(0).toUpperCase())
+          .join('');
+      }
+    } else if (groupChat.participantHandles && groupChat.participantHandles.length > 0) {
+      // If no display name, build one from participant handles
+      const participantNames = [];
+      
+      // Try to match each handle to a contact
+      for (const handle of groupChat.participantHandles.slice(0, 3)) {
+        let match = null;
+        
+        if (handle.includes('@')) {
+          match = importedContacts.find(c => 
+            c.phone && c.phone.toLowerCase() === handle.toLowerCase()
+          );
+        } else {
+          const cleaned = handle.replace(/\D/g, '');
+          match = importedContacts.find(c => {
+            const contactCleaned = c.phone.replace(/\D/g, '');
+            return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+          });
+        }
+        
+        if (match) {
+          participantNames.push(match.name.split(' ')[0]); // First name only
+        } else {
+          // Fallback to formatted number/email
+          if (handle.includes('@')) {
+            participantNames.push(handle.split('@')[0]);
+          } else {
+            participantNames.push(formatPhoneNumber(handle));
+          }
+        }
+      }
+      
+      // Build display name from participants
+      if (participantNames.length > 0) {
+        displayName = participantNames.join(', ');
+        if (groupChat.participantCount > 3) {
+          displayName += ` +${groupChat.participantCount - 3}`;
+        }
+        
+        // Create initials from first 2 participants
+        const initialsCount = Math.min(2, participantNames.length);
+        avatarInitials = participantNames.slice(0, initialsCount)
+          .map(name => name.charAt(0).toUpperCase())
+          .join('');
+      } else {
+        displayName = 'Unnamed Group';
+      }
+    }
+    
+    return {
+      ...groupChat,
+      displayName,
+      avatarInitials
+    };
+  });
+  
+  // Store enhanced group chats globally for "Load More" functionality
+  window.allTopGroupChats = enhancedGroupChats;
+  
+  // Use previous count if it exists, otherwise start with 10
+  if (window.currentGroupChatsShown === undefined || window.currentGroupChatsShown > enhancedGroupChats.length) {
+    window.currentGroupChatsShown = Math.min(10, enhancedGroupChats.length);
+  } else {
+    window.currentGroupChatsShown = Math.min(window.currentGroupChatsShown, enhancedGroupChats.length);
+  }
+  
+  // Show group chats up to current count
+  const groupChatsToShow = enhancedGroupChats.slice(0, window.currentGroupChatsShown);
+  
+  groupChatsToShow.forEach((groupChat, index) => {
+    const groupElement = document.createElement('div');
+    groupElement.className = 'contact-item';
+    
+    // Use initials if available, otherwise generic group icon
+    let avatarHTML;
+    if (groupChat.avatarInitials) {
+      avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">${groupChat.avatarInitials}</div>`;
+    } else {
+      avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">👥</div>`;
+    }
+    
+    groupElement.innerHTML = `
+      <div class="contact-left">
+        <div class="contact-rank">${index + 1}</div>
+        ${avatarHTML}
+        <div class="contact-info-item">
+          <h4>${groupChat.displayName}</h4>
+          <p>${groupChat.messageCount.toLocaleString()} texts · ${groupChat.participantCount} people</p>
+        </div>
+      </div>
+      <div class="contact-count">${groupChat.messageCount.toLocaleString()}</div>
+    `;
+    
+    // Add click handler to show group chat detail
+    groupElement.addEventListener('click', () => {
+      showGroupChatDetail(groupChat);
+    });
+    
+    // Stagger animation
+    groupElement.style.opacity = '0';
+    groupElement.style.transform = 'translateX(-20px)';
+    
+    setTimeout(() => {
+      groupElement.style.transition = 'all 0.4s ease';
+      groupElement.style.opacity = '1';
+      groupElement.style.transform = 'translateX(0)';
+    }, index * 100);
+    
+    container.appendChild(groupElement);
+  });
+  
+  // Show or hide "Load More" button
+  const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
+  if (window.currentGroupChatsShown < enhancedGroupChats.length) {
+    loadMoreBtn.style.display = 'flex';
+    loadMoreBtn.querySelector('span').textContent = 'Load More';
+  } else {
+    loadMoreBtn.style.display = 'none';
+  }
+}
+
+// Show group chat detail page
+async function showGroupChatDetail(groupChat) {
+  // Store current group chat ID and clear contact handle
+  window.currentGroupChatId = groupChat.chatId;
+  window.currentContactHandle = null;
+  
+  // Hide dashboard, show detail
+  dashboardContainer.style.display = 'none';
+  contactDetailContainer.style.display = 'block';
+  
+  // Set header info
+  const avatarContainer = document.querySelector('.detail-avatar-container');
+  if (groupChat.avatarInitials) {
+    avatarContainer.innerHTML = `<div class="detail-contact-avatar group-chat-avatar-large">${groupChat.avatarInitials}</div>`;
+  } else {
+    avatarContainer.innerHTML = '<div class="detail-contact-avatar group-chat-avatar-large">👥</div>';
+  }
+  
+  document.getElementById('detailContactName').textContent = groupChat.displayName;
+  document.getElementById('detailContactHandle').textContent = `${groupChat.participantCount} participants`;
+  
+  // Populate year selector for group chat
+  const contactDetailYearSelector = document.getElementById('contactDetailYearSelector');
+  contactDetailYearSelector.innerHTML = '<option value="">All Time</option>';
+  availableYears.forEach(year => {
+    const option = document.createElement('option');
+    option.value = year;
+    option.textContent = year;
+    contactDetailYearSelector.appendChild(option);
+  });
+  contactDetailYearSelector.value = ''; // Reset to all time
+  
+  // Switch filters to dropdowns for group chats
+  document.getElementById('wordFilterGroup').style.display = 'none';
+  document.getElementById('wordFilterDropdown').style.display = 'block';
+  document.getElementById('messageFilterGroup').style.display = 'none';
+  document.getElementById('messageFilterDropdown').style.display = 'block';
+  
+  // Load and display participants (no year filter initially)
+  await loadGroupChatParticipants(null);
+  
+  // Load stats
+  try {
+    const result = await window.electronAPI.getGroupChatStats(groupChat.chatId);
+    
+    if (result.success && result.stats) {
+      // Update quick stats
+      document.getElementById('detailTotalMessages').textContent = result.stats.totalMessages.toLocaleString();
+      document.getElementById('detailSentMessages').textContent = result.stats.sentMessages.toLocaleString();
+      document.getElementById('detailReceivedMessages').textContent = result.stats.receivedMessages.toLocaleString();
+      
+      // Update "The Numbers" section
+      const firstDate = result.stats.firstMessageDate ?
+        new Date(result.stats.firstMessageDate / 1000000 + new Date('2001-01-01').getTime()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) :
+        'Unknown';
+      document.getElementById('detailFirstMessage').textContent = firstDate;
+      document.getElementById('detailMostActiveYear').textContent = result.stats.mostActiveYear || '-';
+      document.getElementById('detailAvgPerDay').textContent = `${result.stats.avgPerDay} texts/day`;
+      document.getElementById('detailLongestStreak').textContent = result.stats.longestStreak ? `${result.stats.longestStreak} days` : '-';
+      
+      // Create chart
+      createContactMessagesChart(result.stats.messagesByYear);
+      
+      // Update ratio visualization
+      const youPercent = result.stats.totalMessages > 0 ? (result.stats.sentMessages / result.stats.totalMessages * 100).toFixed(0) : 50;
+      const themPercent = 100 - youPercent;
+      
+      document.getElementById('detailRatioYou').style.width = `${youPercent}%`;
+      document.getElementById('detailRatioYouPercent').textContent = `${youPercent}%`;
+      document.getElementById('detailRatioThem').style.width = `${themPercent}%`;
+      document.getElementById('detailRatioThemPercent').textContent = `${themPercent}%`;
+      document.getElementById('detailContactNameShort').textContent = 'Everyone';
+      
+      // Load words, emojis, and reactions (default: all people)
+      await loadGroupChatWords('all');
+      await loadGroupChatEmojis('all');
+      await loadGroupChatReactions(groupChat.chatId, 'all');
+      
+      // Clear search results
+      document.getElementById('searchResults').style.display = 'none';
+      document.getElementById('messageSearchInput').value = '';
+    }
+  } catch (error) {
+    console.error('Error loading group chat stats:', error);
+  }
+  
+  // Add event listeners for person selectors
+  document.getElementById('wordPersonSelector').addEventListener('change', async (e) => {
+    const selectedPerson = e.target.value;
+    // Get current year filter
+    const yearSelector = document.getElementById('contactDetailYearSelector');
+    const currentYear = yearSelector ? yearSelector.value : null;
+    await loadGroupChatWords(selectedPerson, currentYear);
+    await loadGroupChatEmojis(selectedPerson, currentYear);
+  });
+  
+  document.getElementById('messagePersonSelector').addEventListener('change', async () => {
+    // If there's an active search, re-run it
+    const searchInput = document.getElementById('messageSearchInput');
+    if (searchInput.value.trim()) {
+      await handleGroupChatMessageSearch();
+    }
+  });
+  
+  // Add event listener for emoji person selector
+  const emojiPersonSelector = document.getElementById('emojiPersonSelector');
+  emojiPersonSelector.style.display = 'block'; // Show it for group chats
+  emojiPersonSelector.addEventListener('change', async (e) => {
+    const selectedPerson = e.target.value;
+    // Get current year filter
+    const yearSelector = document.getElementById('contactDetailYearSelector');
+    const currentYear = yearSelector ? yearSelector.value : null;
+    await loadGroupChatEmojis(selectedPerson, currentYear);
+  });
+  
+  // Add event listener for reaction person selector
+  const reactionPersonSelector = document.getElementById('reactionPersonSelector');
+  reactionPersonSelector.style.display = 'block'; // Show it for group chats
+  reactionPersonSelector.addEventListener('change', async (e) => {
+    const selectedPerson = e.target.value;
+    // Get current year filter
+    const yearSelector = document.getElementById('contactDetailYearSelector');
+    const currentYear = yearSelector ? yearSelector.value : null;
+    await loadGroupChatReactions(groupChat.chatId, selectedPerson, currentYear);
+  });
+  
+  // Show both emoji and reaction sections for group chats
+  document.getElementById('emojiStatsSection').style.display = 'block';
+  document.getElementById('reactionBattleSection').style.display = 'block';
+}
+
+// Load group chat participants with optional year filter
+async function loadGroupChatParticipants(year = null) {
+  try {
+    const participantsResult = await window.electronAPI.getGroupChatParticipants(window.currentGroupChatId, year);
+    
+    if (participantsResult.success && participantsResult.participants) {
+      window.currentGroupChatParticipants = participantsResult.participants;
+      
+      // Load imported contacts for name matching
+      let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
+      if (importedContacts.length === 0) {
+        const loadResult = await window.electronAPI.loadContacts();
+        if (loadResult.success && loadResult.contacts.length > 0) {
+          importedContacts = loadResult.contacts;
+          localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
+        }
+      }
+      
+      // Enhance participants with contact info
+      const enhancedParticipants = participantsResult.participants.map(participant => {
+        let displayName = participant.contact;
+        let contactPhoto = null;
+        
+        // Try to match with imported contacts
+        if (importedContacts.length > 0) {
+          let match = null;
+          
+          if (participant.contact.includes('@')) {
+            match = importedContacts.find(c => 
+              c.phone && c.phone.toLowerCase() === participant.contact.toLowerCase()
+            );
+          } else {
+            const cleaned = participant.contact.replace(/\D/g, '');
+            match = importedContacts.find(c => {
+              const contactCleaned = c.phone.replace(/\D/g, '');
+              return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+            });
+          }
+          
+          if (match) {
+            displayName = match.name;
+            contactPhoto = match.photo || null;
+          }
+        }
+        
+        // Format phone number if no name match
+        if (displayName === participant.contact && !participant.contact.includes('@')) {
+          displayName = formatPhoneNumber(participant.contact);
+        }
+        
+        return {
+          ...participant,
+          displayName,
+          contactPhoto
+        };
+      });
+      
+      // Populate dropdowns with participants
+      const wordSelector = document.getElementById('wordPersonSelector');
+      const messageSelector = document.getElementById('messagePersonSelector');
+      const emojiSelector = document.getElementById('emojiPersonSelector');
+      const reactionSelector = document.getElementById('reactionPersonSelector');
+      
+      // Clear existing options (except All People and You)
+      wordSelector.innerHTML = '<option value="all">All People</option><option value="you">You</option>';
+      messageSelector.innerHTML = '<option value="all">All People</option><option value="you">You</option>';
+      emojiSelector.innerHTML = '<option value="all">All People</option><option value="you">You</option>';
+      reactionSelector.innerHTML = '<option value="all">All People</option>';
+      
+      enhancedParticipants.forEach(p => {
+        const wordOption = document.createElement('option');
+        wordOption.value = p.handleId;
+        wordOption.textContent = p.displayName;
+        wordSelector.appendChild(wordOption);
+        
+        const messageOption = document.createElement('option');
+        messageOption.value = p.handleId;
+        messageOption.textContent = p.displayName;
+        messageSelector.appendChild(messageOption);
+        
+        const emojiOption = document.createElement('option');
+        emojiOption.value = p.handleId;
+        emojiOption.textContent = p.displayName;
+        emojiSelector.appendChild(emojiOption);
+        
+        const reactionOption = document.createElement('option');
+        reactionOption.value = p.handleId;
+        reactionOption.textContent = p.displayName;
+        reactionSelector.appendChild(reactionOption);
+      });
+      
+      // Display participants list
+      renderGroupChatParticipants(enhancedParticipants);
+      
+      // Show participants section
+      document.getElementById('groupChatParticipantsSection').style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Error loading participants:', error);
+  }
+}
+
+// Render group chat participants in a circle
+function renderGroupChatParticipants(participants) {
+  const container = document.getElementById('groupChatParticipantsList');
+  container.innerHTML = '';
+  
+  const numParticipants = participants.length;
+  const radius = 200; // Distance from center (wider spacing)
+  
+  participants.forEach((participant, index) => {
+    const participantElement = document.createElement('div');
+    participantElement.className = 'participant-circle-item';
+    
+    // Calculate position on circle
+    const angle = (index / numParticipants) * 2 * Math.PI - Math.PI / 2; // Start from top
+    const x = radius * Math.cos(angle);
+    const y = radius * Math.sin(angle);
+    
+    participantElement.style.transform = `translate(${x}px, ${y}px)`;
+    
+    // Format message count
+    let countDisplay = participant.messageCount.toLocaleString();
+    if (participant.messageCount >= 1000) {
+      countDisplay = (participant.messageCount / 1000).toFixed(1) + 'k';
+    }
+    
+    let avatarHTML = '';
+    if (participant.contactPhoto) {
+      const initials = getInitials(participant.displayName);
+      avatarHTML = `<img src="${participant.contactPhoto}" alt="${participant.displayName}" class="participant-circle-avatar" onerror="this.parentElement.innerHTML='<div class=\\'participant-circle-avatar-placeholder\\'>${initials}</div><div class=\\'participant-circle-count\\'>${countDisplay}</div><div class=\\'participant-circle-name\\'>${participant.displayName}</div>';">`;
+    } else {
+      avatarHTML = `<div class="participant-circle-avatar-placeholder">${getInitials(participant.displayName)}</div>`;
+    }
+    
+    participantElement.innerHTML = `
+      ${avatarHTML}
+      <div class="participant-circle-count">${countDisplay}</div>
+      <div class="participant-circle-name">${participant.displayName}</div>
+    `;
+    
+    // Add slight stagger to animation
+    participantElement.style.animationDelay = `${index * 0.1}s`;
+    
+    container.appendChild(participantElement);
+  });
+}
+
+// Render word cloud (helper function)
+function renderWordCloud(words, container) {
+  container.innerHTML = '';
+  
+  if (words && words.length > 0) {
+    words.forEach((word, index) => {
+      const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
+      container.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
+    });
+  } else {
+    container.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
+  }
+}
+
+// Render emoji stats (helper function)
+function renderEmojiStats(emojis, container) {
+  container.innerHTML = '';
+  
+  if (emojis && emojis.length > 0) {
+    emojis.forEach(emoji => {
+      container.innerHTML += `
+        <div class="emoji-item">
+          <span class="emoji-char">${emoji.emoji}</span>
+          <span class="emoji-count">${emoji.count}</span>
+        </div>
+      `;
+    });
+  } else {
+    container.innerHTML = '<p style="color: var(--medium-gray); text-align: center; grid-column: 1 / -1;">No emojis found</p>';
+  }
+}
+
+// Load group chat words
+async function loadGroupChatWords(personId, year = null) {
+  try {
+    const result = await window.electronAPI.getGroupChatWords(window.currentGroupChatId, 20, personId, year);
+    
+    if (result.success && result.words) {
+      renderWordCloud(result.words, document.getElementById('detailWordCloud'));
+    }
+  } catch (error) {
+    console.error('Error loading group chat words:', error);
+  }
+}
+
+// Load group chat emojis
+async function loadGroupChatEmojis(personId, year = null) {
+  try {
+    const result = await window.electronAPI.getGroupChatEmojis(window.currentGroupChatId, 10, personId, year);
+    
+    if (result.success && result.emojis) {
+      renderEmojiStats(result.emojis, document.getElementById('detailEmojiStats'));
+    }
+  } catch (error) {
+    console.error('Error loading group chat emojis:', error);
+  }
+}
+
+// Handle group chat message search
+async function handleGroupChatMessageSearch() {
+  const searchInput = document.getElementById('messageSearchInput');
+  const searchTerm = searchInput.value.trim();
+  
+  if (!searchTerm || !window.currentGroupChatId) {
+    return;
+  }
+  
+  const personSelector = document.getElementById('messagePersonSelector');
+  const personId = personSelector.value;
+  
+  // Reset pagination
+  window.currentSearchTerm = searchTerm;
+  window.currentSearchOffset = 0;
+  
+  try {
+    const result = await window.electronAPI.searchGroupChatMessages(
+      window.currentGroupChatId,
+      searchTerm,
+      SEARCH_PAGE_SIZE,
+      0,
+      personId
+    );
+    
+    if (result.success) {
+      window.totalSearchResults = result.count;
+      
+      const resultsContainer = document.getElementById('searchResults');
+      const searchCount = document.getElementById('searchResultCount');
+      const examplesContainer = document.getElementById('searchExamples');
+      const loadMoreBtn = document.getElementById('loadMoreMessagesBtn');
+      
+      searchCount.textContent = result.count.toLocaleString();
+      resultsContainer.style.display = 'block';
+      
+      // Clear and populate examples
+      examplesContainer.innerHTML = '';
+      result.examples.forEach(example => {
+        const messageEl = createMessageElement(example, searchTerm);
+        examplesContainer.appendChild(messageEl);
+      });
+      
+      // Show/hide load more button
+      if (result.count > SEARCH_PAGE_SIZE) {
+        loadMoreBtn.style.display = 'block';
+        window.currentSearchOffset = SEARCH_PAGE_SIZE;
+      } else {
+        loadMoreBtn.style.display = 'none';
+      }
+    }
+  } catch (error) {
+    console.error('Error searching group chat messages:', error);
+  }
+}
+
+// ============================================
 // YEAR FILTERING
 // ============================================
 
@@ -1526,24 +2203,51 @@ async function populateYearSelectors() {
 // Handle year change for top contacts
 async function handleTopContactsYearChange(year) {
   try {
-    let topContactsData;
+    // Check if we're viewing groups or DMs
+    const activeFilter = document.querySelector('.filter-btn[data-filter-type="chat-type"].active');
+    const isGroupsView = activeFilter && activeFilter.dataset.filter === 'groups';
     
-    if (year) {
-      // Get contacts for specific year
-      const result = await window.electronAPI.getTopContactsByYear(year);
-      if (result.success) {
-        topContactsData = result.contacts;
+    if (isGroupsView) {
+      // Handle group chats
+      let groupChatsData;
+      
+      if (year) {
+        const result = await window.electronAPI.getTopGroupChatsByYear(year);
+        if (result.success) {
+          groupChatsData = result.groupChats;
+        } else {
+          console.error('Failed to load group chats for year:', result.error);
+          return;
+        }
       } else {
-        console.error('Failed to load contacts for year:', result.error);
-        return;
+        const result = await window.electronAPI.getTopGroupChats();
+        if (result.success) {
+          groupChatsData = result.groupChats;
+        } else {
+          console.error('Failed to load group chats:', result.error);
+          return;
+        }
       }
+      
+      renderGroupChats(groupChatsData);
     } else {
-      // Get all-time contacts
-      topContactsData = userData.topContacts;
+      // Handle DMs
+      let topContactsData;
+      
+      if (year) {
+        const result = await window.electronAPI.getTopContactsByYear(year);
+        if (result.success) {
+          topContactsData = result.contacts;
+        } else {
+          console.error('Failed to load contacts for year:', result.error);
+          return;
+        }
+      } else {
+        topContactsData = userData.topContacts;
+      }
+      
+      await renderTopContacts(topContactsData);
     }
-    
-    // Re-render contacts
-    await renderTopContacts(topContactsData);
   } catch (error) {
     console.error('Error changing year:', error);
   }
@@ -1551,23 +2255,84 @@ async function handleTopContactsYearChange(year) {
 
 // Handle year change for contact detail view
 async function handleContactDetailYearChange(year) {
-  if (!currentContactHandle) return;
-  
-  try {
-    const result = await window.electronAPI.getContactStats(currentContactHandle, year || null);
-    
-    if (result.success && result.stats) {
-      // Get contact info from current view
-      const displayName = document.getElementById('detailContactName').textContent;
-      loadContactDetailStats(result.stats, result.words, result.emojis, displayName);
+  // Check if we're viewing a group chat or a contact
+  if (window.currentGroupChatId) {
+    // Handle group chat year change - reload ALL stats with year filter
+    try {
+      const result = await window.electronAPI.getGroupChatStats(window.currentGroupChatId, year);
       
-      // Load reactions
-      await loadContactReactions(currentContactHandle, displayName);
-    } else {
-      console.error('Failed to load contact stats:', result.error);
+      if (result.success && result.stats) {
+        const stats = result.stats;
+        
+        // Update ALL stats with year-filtered data
+        document.getElementById('detailTotalMessages').textContent = stats.totalMessages.toLocaleString();
+        document.getElementById('detailSentMessages').textContent = stats.sentMessages.toLocaleString();
+        document.getElementById('detailReceivedMessages').textContent = stats.receivedMessages.toLocaleString();
+        
+        // Update "The Numbers" section
+        const firstDate = stats.firstMessageDate ?
+          new Date(stats.firstMessageDate / 1000000 + new Date('2001-01-01').getTime()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) :
+          'Unknown';
+        document.getElementById('detailFirstMessage').textContent = firstDate;
+        document.getElementById('detailMostActiveYear').textContent = stats.mostActiveYear || '-';
+        document.getElementById('detailAvgPerDay').textContent = `${stats.avgPerDay} texts/day`;
+        document.getElementById('detailLongestStreak').textContent = stats.longestStreak ? `${stats.longestStreak} days` : '-';
+        
+        // Update chart - filter to show only selected year if year is specified
+        let chartData = stats.messagesByYear;
+        if (year) {
+          chartData = stats.messagesByYear.filter(m => m.year === year);
+        }
+        createContactMessagesChart(chartData);
+        
+        // Update ratio visualization
+        const youPercent = stats.totalMessages > 0 ? (stats.sentMessages / stats.totalMessages * 100).toFixed(0) : 50;
+        const themPercent = 100 - youPercent;
+        
+        document.getElementById('detailRatioYou').style.width = `${youPercent}%`;
+        document.getElementById('detailRatioYouPercent').textContent = `${youPercent}%`;
+        document.getElementById('detailRatioThem').style.width = `${themPercent}%`;
+        document.getElementById('detailRatioThemPercent').textContent = `${themPercent}%`;
+        
+        // Reload participants with year filter (updates message counts)
+        await loadGroupChatParticipants(year);
+        
+        // Reload words with current person filter and year
+        const wordSelector = document.getElementById('wordPersonSelector');
+        const currentPersonFilter = wordSelector ? wordSelector.value : 'all';
+        await loadGroupChatWords(currentPersonFilter, year);
+        
+        // Reload emojis with current person filter and year
+        const emojiSelector = document.getElementById('emojiPersonSelector');
+        const currentEmojiFilter = emojiSelector ? emojiSelector.value : 'all';
+        await loadGroupChatEmojis(currentEmojiFilter, year);
+        
+        // Reload reactions with current person filter and year
+        const reactionSelector = document.getElementById('reactionPersonSelector');
+        const currentReactionFilter = reactionSelector ? reactionSelector.value : 'all';
+        await loadGroupChatReactions(window.currentGroupChatId, currentReactionFilter, year);
+      }
+    } catch (error) {
+      console.error('Error changing group chat year:', error);
     }
-  } catch (error) {
-    console.error('Error changing contact detail year:', error);
+  } else if (currentContactHandle) {
+    // Handle contact year change
+    try {
+      const result = await window.electronAPI.getContactStats(currentContactHandle, year || null);
+      
+      if (result.success && result.stats) {
+        // Get contact info from current view
+        const displayName = document.getElementById('detailContactName').textContent;
+        loadContactDetailStats(result.stats, result.words, result.emojis, displayName);
+        
+        // Load reactions
+        await loadContactReactions(currentContactHandle, displayName);
+      } else {
+        console.error('Failed to load contact stats:', result.error);
+      }
+    } catch (error) {
+      console.error('Error changing contact detail year:', error);
+    }
   }
 }
 
@@ -1578,12 +2343,36 @@ async function handleContactDetailYearChange(year) {
 // Show contact detail view
 async function showContactDetail(contact) {
   
-  // Store current contact handles (can be multiple for consolidated contacts)
+  // Store current contact handles (can be multiple for consolidated contacts) and clear group chat ID
   currentContactHandle = contact.handles || [contact.handle];
+  window.currentGroupChatId = null;
   
   // Hide dashboard, show detail
   dashboardContainer.style.display = 'none';
   contactDetailContainer.style.display = 'block';
+  
+  // Restore button filters for DM (hide dropdowns)
+  document.getElementById('wordFilterGroup').style.display = 'inline-flex';
+  document.getElementById('wordFilterDropdown').style.display = 'none';
+  document.getElementById('messageFilterGroup').style.display = 'inline-flex';
+  document.getElementById('messageFilterDropdown').style.display = 'none';
+  
+  // Hide participants section (only for group chats)
+  document.getElementById('groupChatParticipantsSection').style.display = 'none';
+  
+  // Hide person selectors (only for group chats)
+  document.getElementById('emojiPersonSelector').style.display = 'none';
+  document.getElementById('reactionPersonSelector').style.display = 'none';
+  
+  // Show both emoji and reaction sections for DMs
+  document.getElementById('emojiStatsSection').style.display = 'block';
+  document.getElementById('reactionBattleSection').style.display = 'block';
+  
+  // Show reactions section
+  const reactionsSection = document.querySelector('.detail-section:has(#yourReactions)');
+  if (reactionsSection) {
+    reactionsSection.style.display = 'block';
+  }
   
   // Populate year selector for this contact
   contactDetailYearSelector.innerHTML = '<option value="">All Time</option>';
@@ -1682,8 +2471,8 @@ function loadContactDetailStats(stats, words, emojis, contactName) {
   document.getElementById('detailMostActiveYear').textContent = stats.mostActiveYear || '-';
   document.getElementById('detailAvgPerDay').textContent = `${stats.avgPerDay} texts/day`;
   
-  // Calculate streak (placeholder for now)
-  document.getElementById('detailLongestStreak').textContent = '-';
+  // Display longest streak
+  document.getElementById('detailLongestStreak').textContent = stats.longestStreak ? `${stats.longestStreak} days` : '-';
   
   // Word cloud
   const wordCloud = document.getElementById('detailWordCloud');
@@ -1783,6 +2572,67 @@ async function loadContactReactions(contactHandle, contactName) {
   }
 }
 
+// Load group chat reactions with optional person and year filters
+async function loadGroupChatReactions(chatId, personId = 'all', year = null) {
+  try {
+    const result = await window.electronAPI.getGroupChatReactions(chatId, personId, year);
+    
+    if (result.success) {
+      const yourReactionsContainer = document.getElementById('yourReactions');
+      const theirReactionsContainer = document.getElementById('theirReactions');
+      const theirReactionsTitle = document.getElementById('theirReactionsTitle');
+      
+      // Update title based on person filter
+      let titleText = 'Everyone';
+      if (personId && personId !== 'all' && personId !== 'you') {
+        // Get the person's name from the dropdown
+        const personSelector = document.getElementById('reactionPersonSelector');
+        if (personSelector) {
+          const selectedOption = personSelector.options[personSelector.selectedIndex];
+          titleText = selectedOption ? selectedOption.text : 'Them';
+        }
+      }
+      theirReactionsTitle.textContent = titleText;
+      
+      // Display your reactions (always show all 6)
+      yourReactionsContainer.innerHTML = '';
+      if (result.yourReactions && result.yourReactions.length > 0) {
+        result.yourReactions.forEach(reaction => {
+          const itemClass = reaction.count === 0 ? 'reaction-item reaction-item-zero' : 'reaction-item';
+          yourReactionsContainer.innerHTML += `
+            <div class="${itemClass}">
+              <span class="reaction-emoji">${reaction.emoji}</span>
+              <span class="reaction-count">${reaction.count.toLocaleString()}</span>
+            </div>
+          `;
+        });
+      } else {
+        yourReactionsContainer.innerHTML = '<div class="reactions-empty">No reactions yet</div>';
+      }
+      
+      // Display their reactions (always show all 6)
+      theirReactionsContainer.innerHTML = '';
+      if (result.theirReactions && result.theirReactions.length > 0) {
+        result.theirReactions.forEach(reaction => {
+          const itemClass = reaction.count === 0 ? 'reaction-item reaction-item-zero' : 'reaction-item';
+          theirReactionsContainer.innerHTML += `
+            <div class="${itemClass}">
+              <span class="reaction-emoji">${reaction.emoji}</span>
+              <span class="reaction-count">${reaction.count.toLocaleString()}</span>
+            </div>
+          `;
+        });
+      } else {
+        theirReactionsContainer.innerHTML = '<div class="reactions-empty">No reactions yet</div>';
+      }
+    } else {
+      console.error('Failed to load reactions:', result.error);
+    }
+  } catch (error) {
+    console.error('Error loading group chat reactions:', error);
+  }
+}
+
 // Create messages over time chart for contact
 function createContactMessagesChart(messagesByYear) {
   const canvas = document.getElementById('detailMessagesChart');
@@ -1845,6 +2695,11 @@ function createContactMessagesChart(messagesByYear) {
 
 // Handle message search
 async function handleMessageSearch() {
+  // Check if we're in a group chat or DM
+  if (window.currentGroupChatId) {
+    return handleGroupChatMessageSearch();
+  }
+  
   const searchInput = document.getElementById('messageSearchInput');
   const searchResults = document.getElementById('searchResults');
   const searchResultCount = document.getElementById('searchResultCount');
@@ -1988,6 +2843,8 @@ async function handleFilterButtonClick(e) {
     if (searchInput.value.trim()) {
       await handleMessageSearch();
     }
+  } else if (filterType === 'chat-type') {
+    await handleChatTypeChange(filterValue);
   }
 }
 

@@ -468,13 +468,19 @@
       <div class="top-people-section">
         <div class="top-people-header">
           <div>
-            <h3>Your Top People</h3>
-            <p>Who you text the most</p>
+            <h3 id="topPeopleTitle">Your Top People</h3>
+            <p id="topPeopleSubtitle">Who you text the most</p>
           </div>
-          <select class="year-selector" id="topContactsYearSelector">
-            <option value="">All Time</option>
-            <!-- Years will be populated dynamically -->
-          </select>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="filter-button-group">
+              <button class="filter-btn active" data-filter="dms" data-filter-type="chat-type">DMs</button>
+              <button class="filter-btn" data-filter="groups" data-filter-type="chat-type">Groups</button>
+            </div>
+            <select class="year-selector" id="topContactsYearSelector">
+              <option value="">All Time</option>
+              <!-- Years will be populated dynamically -->
+            </select>
+          </div>
         </div>
         <div class="top-contacts-list" id="topContactsList">
           <!-- Will be populated dynamically -->
@@ -562,13 +568,31 @@
           </div>
         </div>
 
+        <!-- Group Chat Participants (hidden by default) -->
+        <div class="detail-section" id="groupChatParticipantsSection" style="display: none;">
+          <h3>👥 Who's in this group?</h3>
+          <div class="participants-circle-container">
+            <div id="groupChatParticipantsList" class="participants-circle">
+              <!-- Will be populated dynamically -->
+            </div>
+          </div>
+        </div>
+
         <div class="detail-section">
           <div class="section-header-with-filter">
             <h3>🗣️ Most Common Words</h3>
-            <div class="filter-button-group">
+            <div class="filter-button-group" id="wordFilterGroup">
               <button class="filter-btn active" data-filter="both" data-filter-type="word">Both</button>
               <button class="filter-btn" data-filter="them" data-filter-type="word">Them</button>
               <button class="filter-btn" data-filter="you" data-filter-type="word">You</button>
+            </div>
+            <!-- Group chat dropdown (hidden by default) -->
+            <div id="wordFilterDropdown" style="display: none;">
+              <select id="wordPersonSelector" class="person-selector">
+                <option value="all">All People</option>
+                <option value="you">You</option>
+                <!-- Participants will be added dynamically -->
+              </select>
             </div>
           </div>
           <div class="word-cloud" id="detailWordCloud">
@@ -576,15 +600,27 @@
           </div>
         </div>
 
-        <div class="detail-section">
-          <h3>😂 Emoji Stats</h3>
+        <div class="detail-section" id="emojiStatsSection">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <h3 style="margin: 0;">😂 Emoji Stats</h3>
+            <select id="emojiPersonSelector" class="person-selector" style="display: none;">
+              <option value="all">All People</option>
+              <option value="you">You</option>
+            </select>
+          </div>
           <div class="emoji-stats" id="detailEmojiStats">
             <!-- Will be populated dynamically -->
           </div>
         </div>
 
-        <div class="detail-section">
-          <h3>🎭 Reaction Battle</h3>
+        <div class="detail-section" id="reactionBattleSection">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <h3 style="margin: 0;">🎭 Reaction Battle</h3>
+            <select id="reactionPersonSelector" class="person-selector" style="display: none;">
+              <option value="all">All People</option>
+              <option value="you">You</option>
+            </select>
+          </div>
           <p style="font-size: 14px; color: var(--medium-gray); margin-bottom: 20px;">
             Who reacts more? Let's find out...
           </p>
@@ -638,10 +674,18 @@
                 Search for any word or phrase in your conversation history
               </p>
             </div>
-            <div class="filter-button-group">
+            <div class="filter-button-group" id="messageFilterGroup">
               <button class="filter-btn active" data-filter="both" data-filter-type="message">Both</button>
               <button class="filter-btn" data-filter="them" data-filter-type="message">Them</button>
               <button class="filter-btn" data-filter="you" data-filter-type="message">You</button>
+            </div>
+            <!-- Group chat dropdown (hidden by default) -->
+            <div id="messageFilterDropdown" style="display: none;">
+              <select id="messagePersonSelector" class="person-selector">
+                <option value="all">All People</option>
+                <option value="you">You</option>
+                <!-- Participants will be added dynamically -->
+              </select>
             </div>
           </div>
           
