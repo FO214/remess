@@ -1559,6 +1559,27 @@ body {
   margin-bottom: 2.5vh;
 }
 
+.most-used-words-section {
+  background: var(--pure-white);
+  border: 1px solid #e8e8e8;
+  border-radius: 1.5vmin;
+  padding: 2.5vh 2.5vw;
+  margin-bottom: 2.5vh;
+}
+
+.most-used-words-section h3 {
+  font-size: 2.5vmin;
+  font-weight: 700;
+  color: var(--black);
+  margin: 0 0 0.5vh 0;
+}
+
+.most-used-words-section p {
+  font-size: 1.6vmin;
+  color: var(--medium-gray);
+  margin: 0 0 2vh 0;
+}
+
 .top-people-header {
   display: flex;
   justify-content: space-between;
@@ -1870,7 +1891,6 @@ body {
   top: 0;
   background: var(--off-white);
   padding: 24px 48px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   z-index: 10;
   backdrop-filter: blur(10px);
   background: rgba(245, 241, 237, 0.95);
@@ -2183,7 +2203,58 @@ body {
 .search-box {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+}
+
+.section-header-with-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 20px;
+}
+
+.section-header-with-filter h3 {
+  margin: 0;
+}
+
+.filter-button-group {
+  display: inline-flex;
+  gap: 0;
+  background: var(--off-white);
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--medium-gray);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.filter-btn:hover {
+  color: var(--black);
+  background: rgba(26, 26, 26, 0.05);
+}
+
+.filter-btn.active {
+  background: var(--black);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filter-btn.active:hover {
+  background: var(--black);
+  color: white;
 }
 
 .search-input {
@@ -2324,6 +2395,30 @@ body {
   padding: 2px 4px;
   border-radius: 3px;
   font-weight: 600;
+}
+
+.load-more-messages-btn {
+  width: 100%;
+  padding: 14px 28px;
+  margin-top: 20px;
+  border: 2px solid var(--black);
+  border-radius: 8px;
+  background: white;
+  color: var(--black);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.load-more-messages-btn:hover {
+  background: var(--off-white);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.load-more-messages-btn:active {
+  transform: translateY(0);
 }
 
 .search-no-results {

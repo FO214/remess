@@ -82,6 +82,15 @@ const skipImportBtn = document.getElementById('skipImportBtn');
 const topContactsYearSelector = document.getElementById('topContactsYearSelector');
 const contactDetailYearSelector = document.getElementById('contactDetailYearSelector');
 
+// Track current selected year for dashboard
+let currentDashboardYear = '';
+
+// Track message search state
+let currentSearchTerm = '';
+let currentSearchOffset = 0;
+let totalSearchResults = 0;
+const SEARCH_PAGE_SIZE = 10;
+
 // Wrapped experience elements
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
@@ -122,7 +131,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.6';
+          versionTag.textContent = 'v0.1.7';
         }
       }
     }
@@ -281,6 +290,7 @@ function setupEventListeners() {
   // Year selector event listeners
   topContactsYearSelector.addEventListener('change', async (e) => {
     const year = e.target.value;
+    currentDashboardYear = year; // Store the selected year
     await handleTopContactsYearChange(year);
   });
   
@@ -298,6 +308,15 @@ function setupEventListeners() {
     if (e.key === 'Enter') {
       handleMessageSearch();
     }
+  });
+  
+  const loadMoreMessagesBtn = document.getElementById('loadMoreMessagesBtn');
+  loadMoreMessagesBtn.addEventListener('click', handleLoadMoreMessages);
+  
+  // Filter button event listeners
+  const filterBtns = document.querySelectorAll('.filter-btn');
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', handleFilterButtonClick);
   });
   
   // Wrapped experience navigation
@@ -905,6 +924,11 @@ function showDashboard() {
   contactDetailContainer.style.display = 'none';
   dashboardContainer.style.display = 'flex';
   
+  // Restore the year selector value
+  if (topContactsYearSelector) {
+    topContactsYearSelector.value = currentDashboardYear;
+  }
+  
   // Update user info from Auth0 - always show name and avatar
   const displayName = userData?.name || userData?.email || 'User';
   userName.textContent = displayName;
@@ -960,8 +984,42 @@ async function loadDashboardData() {
   // Create charts with real data
   setTimeout(() => {
     createMessagesOverTimeChart(messagesByYear);
-    renderTopContacts(topContacts);
+    
+    // Check if we need to apply a year filter
+    if (currentDashboardYear) {
+      // Apply the year filter that was previously selected
+      handleTopContactsYearChange(currentDashboardYear);
+    } else {
+      // Show all contacts
+      renderTopContacts(topContacts);
+    }
+    
+    // Load dashboard word cloud
+    loadDashboardWords();
   }, 500);
+}
+
+// Load dashboard word cloud
+async function loadDashboardWords() {
+  try {
+    const result = await window.electronAPI.getAllWords(30);
+    
+    if (result.success && result.words) {
+      const wordCloud = document.getElementById('dashboardWordCloud');
+      wordCloud.innerHTML = '';
+      
+      if (result.words.length > 0) {
+        result.words.forEach((word, index) => {
+          const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
+          wordCloud.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
+        });
+      } else {
+        wordCloud.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
+      }
+    }
+  } catch (error) {
+    console.error('Error loading dashboard words:', error);
+  }
 }
 
 // Animate number values
@@ -1118,8 +1176,9 @@ function createMessagesOverTimeChart(messagesByYearData) {
           const yearSelector = document.getElementById('topContactsYearSelector');
           if (yearSelector) {
             yearSelector.value = clickedYear;
+            currentDashboardYear = clickedYear; // Store the selected year
             // Trigger the change event to update the contacts list
-            handleTopContactsYearChange();
+            handleTopContactsYearChange(clickedYear);
           }
         }
       }
@@ -1437,6 +1496,9 @@ async function populateYearSelectors() {
     if (result.success && result.years) {
       availableYears = result.years;
       
+      // Save current selection before repopulating
+      const currentSelection = topContactsYearSelector.value;
+      
       // Populate dashboard year selector
       topContactsYearSelector.innerHTML = '<option value="">All Time</option>';
       result.years.forEach(year => {
@@ -1445,6 +1507,15 @@ async function populateYearSelectors() {
         option.textContent = year;
         topContactsYearSelector.appendChild(option);
       });
+      
+      // Restore previous selection if it was set and still exists
+      if (currentSelection && result.years.includes(currentSelection)) {
+        topContactsYearSelector.value = currentSelection;
+        currentDashboardYear = currentSelection;
+      } else if (currentDashboardYear && result.years.includes(currentDashboardYear)) {
+        // Restore from stored value if selector was reset
+        topContactsYearSelector.value = currentDashboardYear;
+      }
       
     }
   } catch (error) {
@@ -1778,11 +1849,13 @@ async function handleMessageSearch() {
   const searchResults = document.getElementById('searchResults');
   const searchResultCount = document.getElementById('searchResultCount');
   const searchExamples = document.getElementById('searchExamples');
+  const loadMoreBtn = document.getElementById('loadMoreMessagesBtn');
   
   const searchTerm = searchInput.value.trim();
   
   if (!searchTerm) {
     searchResults.style.display = 'none';
+    loadMoreBtn.style.display = 'none';
     return;
   }
   
@@ -1791,13 +1864,21 @@ async function handleMessageSearch() {
     return;
   }
   
+  // Get selected filter from active button
+  const activeFilterBtn = document.querySelector('.filter-btn[data-filter-type="message"].active');
+  const filter = activeFilterBtn ? activeFilterBtn.dataset.filter : 'both';
+  
   try {
+    // Reset offset for new search
+    currentSearchTerm = searchTerm;
+    currentSearchOffset = 0;
     
-    const result = await window.electronAPI.searchContactMessages(currentContactHandle, searchTerm);
+    const result = await window.electronAPI.searchContactMessages(currentContactHandle, searchTerm, SEARCH_PAGE_SIZE, currentSearchOffset, filter);
     
     if (result.success) {
       // Show results
       searchResults.style.display = 'block';
+      totalSearchResults = result.count;
       searchResultCount.textContent = result.count;
       
       // Clear previous examples
@@ -1805,36 +1886,135 @@ async function handleMessageSearch() {
       
       if (result.count === 0) {
         searchExamples.innerHTML = '<div class="search-no-results">No messages found containing "' + searchTerm + '"</div>';
+        loadMoreBtn.style.display = 'none';
       } else {
         // Display example messages
         result.examples.forEach(msg => {
-          const messageEl = document.createElement('div');
-          messageEl.className = 'message-example';
-          
-          // Highlight the search term in the message text
-          const highlightedText = msg.text.replace(
-            new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi'),
-            '<span class="highlight">$1</span>'
-          );
-          
-          messageEl.innerHTML = `
-            <div class="message-header">
-              <span class="message-sender ${msg.isFromMe ? 'from-me' : 'from-them'}">
-                ${msg.isFromMe ? 'You' : 'Them'}
-              </span>
-              <span class="message-date">${msg.formattedDate}</span>
-            </div>
-            <div class="message-text">${highlightedText}</div>
-          `;
-          
+          const messageEl = createMessageElement(msg, searchTerm);
           searchExamples.appendChild(messageEl);
         });
+        
+        // Update offset and show/hide load more button
+        currentSearchOffset += result.examples.length;
+        if (currentSearchOffset < totalSearchResults) {
+          loadMoreBtn.style.display = 'block';
+        } else {
+          loadMoreBtn.style.display = 'none';
+        }
       }
     } else {
       console.error('Search failed:', result.error);
     }
   } catch (error) {
     console.error('Error searching messages:', error);
+  }
+}
+
+// Handle loading more messages
+async function handleLoadMoreMessages() {
+  const searchExamples = document.getElementById('searchExamples');
+  const loadMoreBtn = document.getElementById('loadMoreMessagesBtn');
+  
+  if (!currentContactHandle || !currentSearchTerm) {
+    return;
+  }
+  
+  // Get selected filter from active button
+  const activeFilterBtn = document.querySelector('.filter-btn[data-filter-type="message"].active');
+  const filter = activeFilterBtn ? activeFilterBtn.dataset.filter : 'both';
+  
+  try {
+    const result = await window.electronAPI.searchContactMessages(currentContactHandle, currentSearchTerm, SEARCH_PAGE_SIZE, currentSearchOffset, filter);
+    
+    if (result.success && result.examples.length > 0) {
+      // Append new messages
+      result.examples.forEach(msg => {
+        const messageEl = createMessageElement(msg, currentSearchTerm);
+        searchExamples.appendChild(messageEl);
+      });
+      
+      // Update offset and show/hide load more button
+      currentSearchOffset += result.examples.length;
+      if (currentSearchOffset >= totalSearchResults) {
+        loadMoreBtn.style.display = 'none';
+      }
+    }
+  } catch (error) {
+    console.error('Error loading more messages:', error);
+  }
+}
+
+// Helper to create a message element
+function createMessageElement(msg, searchTerm) {
+  const messageEl = document.createElement('div');
+  messageEl.className = 'message-example';
+  
+  // Highlight the search term in the message text
+  const highlightedText = msg.text.replace(
+    new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi'),
+    '<span class="highlight">$1</span>'
+  );
+  
+  messageEl.innerHTML = `
+    <div class="message-header">
+      <span class="message-sender ${msg.isFromMe ? 'from-me' : 'from-them'}">
+        ${msg.isFromMe ? 'You' : 'Them'}
+      </span>
+      <span class="message-date">${msg.formattedDate}</span>
+    </div>
+    <div class="message-text">${highlightedText}</div>
+  `;
+  
+  return messageEl;
+}
+
+// Handle filter button click
+async function handleFilterButtonClick(e) {
+  const btn = e.currentTarget;
+  const filterType = btn.dataset.filterType;
+  const filterValue = btn.dataset.filter;
+  
+  // Update active state for buttons of this type
+  const btnsOfType = document.querySelectorAll(`.filter-btn[data-filter-type="${filterType}"]`);
+  btnsOfType.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  // Handle based on filter type
+  if (filterType === 'word') {
+    await handleWordFilterChange(filterValue);
+  } else if (filterType === 'message') {
+    // If there's an active search, re-run it with the new filter
+    const searchInput = document.getElementById('messageSearchInput');
+    if (searchInput.value.trim()) {
+      await handleMessageSearch();
+    }
+  }
+}
+
+// Handle word filter change
+async function handleWordFilterChange(filter) {
+  if (!currentContactHandle) {
+    return;
+  }
+  
+  try {
+    const result = await window.electronAPI.getContactWordsFiltered(currentContactHandle, filter, 15);
+    
+    if (result.success && result.words) {
+      const wordCloud = document.getElementById('detailWordCloud');
+      wordCloud.innerHTML = '';
+      
+      if (result.words.length > 0) {
+        result.words.forEach((word, index) => {
+          const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
+          wordCloud.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
+        });
+      } else {
+        wordCloud.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
+      }
+    }
+  } catch (error) {
+    console.error('Error loading filtered words:', error);
   }
 }
 

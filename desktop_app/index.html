@@ -455,6 +455,15 @@
         </div>
       </div>
 
+      <!-- Most Used Words Section -->
+      <div class="most-used-words-section">
+        <h3>🗣️ Your Most Used Words</h3>
+        <p>The words you use most in your texts</p>
+        <div class="word-cloud" id="dashboardWordCloud">
+          <!-- Will be populated dynamically -->
+        </div>
+      </div>
+
       <!-- Top People Section -->
       <div class="top-people-section">
         <div class="top-people-header">
@@ -554,7 +563,14 @@
         </div>
 
         <div class="detail-section">
-          <h3>🗣️ Most Common Words</h3>
+          <div class="section-header-with-filter">
+            <h3>🗣️ Most Common Words</h3>
+            <div class="filter-button-group">
+              <button class="filter-btn active" data-filter="both" data-filter-type="word">Both</button>
+              <button class="filter-btn" data-filter="them" data-filter-type="word">Them</button>
+              <button class="filter-btn" data-filter="you" data-filter-type="word">You</button>
+            </div>
+          </div>
           <div class="word-cloud" id="detailWordCloud">
             <!-- Will be populated dynamically -->
           </div>
@@ -615,10 +631,19 @@
         </div>
 
         <div class="detail-section">
-          <h3>🔍 Search Messages</h3>
-          <p style="font-size: 14px; color: var(--medium-gray); margin-bottom: 16px;">
-            Search for any word or phrase in your conversation history
-          </p>
+          <div class="section-header-with-filter">
+            <div>
+              <h3>🔍 Search Messages</h3>
+              <p style="font-size: 14px; color: var(--medium-gray); margin-bottom: 16px;">
+                Search for any word or phrase in your conversation history
+              </p>
+            </div>
+            <div class="filter-button-group">
+              <button class="filter-btn active" data-filter="both" data-filter-type="message">Both</button>
+              <button class="filter-btn" data-filter="them" data-filter-type="message">Them</button>
+              <button class="filter-btn" data-filter="you" data-filter-type="message">You</button>
+            </div>
+          </div>
           
           <div class="search-box">
             <input 
@@ -636,6 +661,10 @@
             </div>
             <div id="searchExamples" class="search-examples">
               <!-- Examples will be populated here -->
+            </div>
+            <button id="loadMoreMessagesBtn" class="load-more-messages-btn" style="display: none;">
+              Load More Messages
+            </button>
             </div>
           </div>
         </div>

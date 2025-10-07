@@ -271,13 +271,41 @@ ipcMain.handle('get-top-contacts-by-year', async (event, year) => {
 });
 
 // Search contact messages
-ipcMain.handle('search-contact-messages', async (event, contactHandle, searchTerm) => {
+ipcMain.handle('search-contact-messages', async (event, contactHandle, searchTerm, limit = 10, offset = 0, filter = 'both') => {
   try {
-    const result = dbHandler.searchContactMessages(contactHandle, searchTerm, 10);
+    const result = dbHandler.searchContactMessages(contactHandle, searchTerm, limit, offset, filter);
     return { success: true, ...result };
   } catch (error) {
     console.error('Error searching contact messages:', error);
     return { success: false, error: error.message, count: 0, examples: [] };
+  }
+});
+
+// Get all words (for dashboard)
+ipcMain.handle('get-all-words', async (event, limit = 30) => {
+  try {
+    const words = dbHandler.getAllWords(limit);
+    return { success: true, words };
+  } catch (error) {
+    console.error('Error getting all words:', error);
+    return { success: false, error: error.message, words: [] };
+  }
+});
+
+// Get contact words with filter
+ipcMain.handle('get-contact-words-filtered', async (event, contactHandle, filter = 'both', limit = 15) => {
+  try {
+    let words;
+    // Check if contactHandle is an array (multiple handles for one person)
+    if (Array.isArray(contactHandle)) {
+      words = dbHandler.getCombinedContactWords(contactHandle, limit, filter);
+    } else {
+      words = dbHandler.getContactWords(contactHandle, limit, filter);
+    }
+    return { success: true, words };
+  } catch (error) {
+    console.error('Error getting filtered contact words:', error);
+    return { success: false, error: error.message, words: [] };
   }
 });
 

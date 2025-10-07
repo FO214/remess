@@ -17,8 +17,39 @@ const CLONE_DB_PATH = path.join(APP_DATA_DIR, 'chat_clone.db');
 const CONTACTS_CLONE_PATH = path.join(APP_DATA_DIR, 'contacts_clone.db');
 const CONTACTS_CSV_PATH = path.join(APP_DATA_DIR, 'contacts.csv');
 
-// Numbers to exclude from all queries
-const EXCLUDED_NUMBERS = ['+15195206158', '5195206158', '15195206158'];
+// Numbers to exclude from all queries  
+// Keep one dummy value to ensure SQL queries are always valid
+const EXCLUDED_NUMBERS = ['__DUMMY_NEVER_MATCH__'];
+
+/**
+ * Helper to build exclusion clause for SQL queries
+ * Returns { clause, params } where clause is the SQL fragment and params are the values
+ */
+function buildExclusionClause() {
+  if (EXCLUDED_NUMBERS.length === 0) {
+    return { clause: '', params: [] };
+  }
+  const placeholders = EXCLUDED_NUMBERS.map(() => '?').join(',');
+  return { 
+    clause: `AND handle.id NOT IN (${placeholders})`,
+    params: EXCLUDED_NUMBERS 
+  };
+}
+
+/**
+ * Helper to build AND clause for excluding numbers in contact queries
+ * Returns { clause, params } for use after WHERE handle.id = ?
+ */
+function buildContactExclusionClause() {
+  if (EXCLUDED_NUMBERS.length === 0) {
+    return { clause: '', params: [] };
+  }
+  const conditions = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
+  return {
+    clause: `AND ${conditions}`,
+    params: EXCLUDED_NUMBERS
+  };
+}
 
 /**
  * Check if Full Disk Access is granted by trying to access chat.db
@@ -246,14 +277,15 @@ function formatContactResult(result) {
 function getTotalMessages() {
   try {
     const db = new Database(CLONE_DB_PATH, { readonly: true });
-    const placeholders = EXCLUDED_NUMBERS.map(() => '?').join(',');
+    const exclusion = buildExclusionClause();
     const query = `
       SELECT COUNT(DISTINCT message.ROWID) as count
       FROM message
       JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
       JOIN chat_handle_join ON chat_message_join.chat_id = chat_handle_join.chat_id
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
-      WHERE handle.id NOT IN (${placeholders})
+      WHERE 1=1
+        ${exclusion.clause}
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
@@ -262,7 +294,7 @@ function getTotalMessages() {
           HAVING COUNT(handle_id) = 1
         )
     `;
-    const result = db.prepare(query).get(...EXCLUDED_NUMBERS);
+    const result = db.prepare(query).get(...exclusion.params);
     db.close();
     return result.count;
   } catch (error) {
@@ -511,6 +543,68 @@ function getAllStats() {
   } catch (error) {
     console.error('Error getting all stats:', error);
     return null;
+  }
+}
+
+/**
+ * Get most common words from all messages
+ */
+function getAllWords(limit = 30) {
+  try {
+    if (!cloneExists()) {
+      return [];
+    }
+
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+    
+    // Get all message texts (only from user, is_from_me = 1)
+    const query = `
+      SELECT message.text
+      FROM message
+      WHERE (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+        AND message.text IS NOT NULL
+        AND message.text != ''
+        AND message.is_from_me = 1
+    `;
+    
+    const messages = db.prepare(query).all();
+    
+    db.close();
+    
+    // Common words to exclude
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+      'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
+      'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you',
+      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my', 
+      'your', 'me', 'im', 'just', 'so', 'dont', 'didnt', 'cant', 'wont', 'like', 'yeah', 'yes', 'no',
+      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not']);
+    
+    // Count word frequencies
+    const wordCounts = {};
+    messages.forEach(msg => {
+      if (msg.text) {
+        // Clean and split text
+        const words = msg.text
+          .toLowerCase()
+          .replace(/[^\w\s']/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 2 && !stopWords.has(w));
+        
+        words.forEach(word => {
+          wordCounts[word] = (wordCounts[word] || 0) + 1;
+        });
+      }
+    });
+    
+    // Sort by frequency and return top words
+    return Object.entries(wordCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([word, count]) => ({ word, count }));
+    
+  } catch (error) {
+    console.error('Error getting all words:', error);
+    return [];
   }
 }
 
@@ -865,7 +959,7 @@ function getContactStats(contactHandle) {
     const db = new Database(CLONE_DB_PATH, { readonly: true });
     
     // Build exclusion clause
-    const exclusionClause = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
+    const exclusion = buildContactExclusionClause();
     
     // Get total messages with this contact
     const totalQuery = `
@@ -876,7 +970,7 @@ function getContactStats(contactHandle) {
       JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
-        AND ${exclusionClause}
+        ${exclusion.clause}
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
@@ -885,7 +979,7 @@ function getContactStats(contactHandle) {
           HAVING COUNT(handle_id) = 1
         )
     `;
-    const total = db.prepare(totalQuery).get(contactHandle, ...EXCLUDED_NUMBERS);
+    const total = db.prepare(totalQuery).get(contactHandle, ...exclusion.params);
     
     // Get sent vs received
     const sentReceivedQuery = `
@@ -898,7 +992,7 @@ function getContactStats(contactHandle) {
       JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
-        AND ${exclusionClause}
+        ${exclusion.clause}
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
@@ -907,7 +1001,7 @@ function getContactStats(contactHandle) {
           HAVING COUNT(handle_id) = 1
         )
     `;
-    const sentReceived = db.prepare(sentReceivedQuery).get(contactHandle, ...EXCLUDED_NUMBERS);
+    const sentReceived = db.prepare(sentReceivedQuery).get(contactHandle, ...exclusion.params);
     
     // Get first message date
     const firstMessageQuery = `
@@ -918,7 +1012,7 @@ function getContactStats(contactHandle) {
       JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
-        AND ${exclusionClause}
+        ${exclusion.clause}
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
@@ -927,7 +1021,7 @@ function getContactStats(contactHandle) {
           HAVING COUNT(handle_id) = 1
         )
     `;
-    const firstMessage = db.prepare(firstMessageQuery).get(contactHandle, ...EXCLUDED_NUMBERS);
+    const firstMessage = db.prepare(firstMessageQuery).get(contactHandle, ...exclusion.params);
     
     // Get messages by year for this contact
     const messagesByYearQuery = `
@@ -940,7 +1034,7 @@ function getContactStats(contactHandle) {
       JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
-        AND ${exclusionClause}
+        ${exclusion.clause}
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
@@ -951,7 +1045,7 @@ function getContactStats(contactHandle) {
       GROUP BY year
       ORDER BY year
     `;
-    const messagesByYear = db.prepare(messagesByYearQuery).all(contactHandle, ...EXCLUDED_NUMBERS);
+    const messagesByYear = db.prepare(messagesByYearQuery).all(contactHandle, ...exclusion.params);
     
     // Find most active year
     let mostActiveYear = null;
@@ -991,7 +1085,7 @@ function getContactStats(contactHandle) {
 /**
  * Get most common words from messages with a specific contact
  */
-function getContactWords(contactHandle, limit = 20) {
+function getContactWords(contactHandle, limit = 20, filter = 'both') {
   try {
     if (!cloneExists()) {
       return [];
@@ -1001,6 +1095,14 @@ function getContactWords(contactHandle, limit = 20) {
     
     // Build exclusion clause
     const exclusionClause = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
+    
+    // Build filter clause based on sender filter
+    let filterClause = '';
+    if (filter === 'you') {
+      filterClause = 'AND message.is_from_me = 1';
+    } else if (filter === 'them') {
+      filterClause = 'AND message.is_from_me = 0';
+    }
     
     // Get all message texts
     const query = `
@@ -1015,6 +1117,7 @@ function getContactWords(contactHandle, limit = 20) {
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND message.text IS NOT NULL
         AND message.text != ''
+        ${filterClause}
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
           FROM chat_handle_join 
@@ -1426,14 +1529,14 @@ function getCombinedContactStats(contactHandles) {
 /**
  * Get combined words for multiple contact handles
  */
-function getCombinedContactWords(contactHandles, limit = 20) {
+function getCombinedContactWords(contactHandles, limit = 20, filter = 'both') {
   try {
     if (!Array.isArray(contactHandles) || contactHandles.length === 0) {
       return [];
     }
     
-    // Get words for each handle
-    const allWords = contactHandles.map(handle => getContactWords(handle, limit * 2));
+    // Get words for each handle with filter
+    const allWords = contactHandles.map(handle => getContactWords(handle, limit * 2, filter));
     
     // Combine word counts
     const wordCounts = {};
@@ -1746,7 +1849,7 @@ function getContactReactions(contactHandle) {
 /**
  * Search messages with a specific contact for a word/phrase
  */
-function searchContactMessages(contactHandle, searchTerm, limit = 10) {
+function searchContactMessages(contactHandle, searchTerm, limit = 10, offset = 0, filter = 'both') {
   try {
     if (!cloneExists()) {
       return { count: 0, examples: [] };
@@ -1758,6 +1861,15 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10) {
     const handles = Array.isArray(contactHandle) ? contactHandle : [contactHandle];
     const handlePlaceholders = handles.map(() => '?').join(',');
     const exclusionClause = EXCLUDED_NUMBERS.map(() => '?').join(',');
+    
+    // Build filter clause based on sender filter
+    let filterClause = '';
+    if (filter === 'you') {
+      filterClause = 'AND message.is_from_me = 1';
+    } else if (filter === 'them') {
+      filterClause = 'AND message.is_from_me = 0';
+    }
+    // If filter === 'both', no additional clause needed
     
     // Get count of messages containing the search term
     const countQuery = `
@@ -1772,6 +1884,7 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10) {
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND message.text IS NOT NULL
         AND message.text LIKE ?
+        ${filterClause}
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
           FROM chat_handle_join 
@@ -1783,7 +1896,7 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10) {
     const searchPattern = `%${searchTerm}%`;
     const countResult = db.prepare(countQuery).get(...handles, ...EXCLUDED_NUMBERS, searchPattern);
     
-    // Get example messages
+    // Get example messages with offset support
     const examplesQuery = `
       SELECT 
         message.text,
@@ -1799,6 +1912,7 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10) {
         AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND message.text IS NOT NULL
         AND message.text LIKE ?
+        ${filterClause}
         AND chat_message_join.chat_id IN (
           SELECT chat_id 
           FROM chat_handle_join 
@@ -1806,10 +1920,10 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10) {
           HAVING COUNT(handle_id) = 1
         )
       ORDER BY message.date DESC
-      LIMIT ?
+      LIMIT ? OFFSET ?
     `;
     
-    const examples = db.prepare(examplesQuery).all(...handles, ...EXCLUDED_NUMBERS, searchPattern, limit);
+    const examples = db.prepare(examplesQuery).all(...handles, ...EXCLUDED_NUMBERS, searchPattern, limit, offset);
     
     db.close();
     
@@ -1849,6 +1963,7 @@ module.exports = {
   getTopContacts,
   getTopContactsByYear,
   getSentVsReceived,
+  getAllWords,
   getMostActiveYear,
   getAverageMessagesPerDay,
   getAllStats,
