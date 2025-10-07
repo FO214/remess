@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from 'react';
 
+interface GitHubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GitHubRelease {
+  assets?: GitHubAsset[];
+}
+
 export default function Home() {
   const [downloadUrl, setDownloadUrl] = useState('https://github.com/FO214/remess/releases/latest');
   const [copied, setCopied] = useState(false);
@@ -10,9 +19,9 @@ export default function Home() {
     // Fetch the latest release info from GitHub API
     fetch('https://api.github.com/repos/FO214/remess/releases/latest')
       .then(res => res.json())
-      .then(data => {
+      .then((data: GitHubRelease) => {
         // Find the .dmg asset
-        const dmgAsset = data.assets?.find((asset: any) => asset.name.endsWith('.dmg'));
+        const dmgAsset = data.assets?.find((asset: GitHubAsset) => asset.name.endsWith('.dmg'));
         if (dmgAsset) {
           setDownloadUrl(dmgAsset.browser_download_url);
         }
@@ -141,6 +150,7 @@ export default function Home() {
       {/* Hero Section */}
       <div className="hero-section">
         <div className="hero-content">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon.png" alt="Remess" className="landing-logo" />
           <h1 className="landing-title">Remess</h1>
           <p className="landing-subtitle">Your LIFE in Texts</p>
