@@ -131,7 +131,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.8';
+          versionTag.textContent = 'v0.1.9';
         }
       }
     }
