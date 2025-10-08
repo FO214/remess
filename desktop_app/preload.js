@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAvailableYears: () => ipcRenderer.invoke('get-available-years'),
   getTopContactsByYear: (year) => ipcRenderer.invoke('get-top-contacts-by-year', year),
   searchContactMessages: (contactHandle, searchTerm, limit, offset, filter) => ipcRenderer.invoke('search-contact-messages', contactHandle, searchTerm, limit, offset, filter),
-  getContactReactions: (contactHandle) => ipcRenderer.invoke('get-contact-reactions', contactHandle),
+  getContactReactions: (contactHandle, year) => ipcRenderer.invoke('get-contact-reactions', contactHandle, year),
   getAllWords: (limit) => ipcRenderer.invoke('get-all-words', limit),
   getContactWordsFiltered: (contactHandle, filter, limit) => ipcRenderer.invoke('get-contact-words-filtered', contactHandle, filter, limit),
   getTopGroupChats: (limit) => ipcRenderer.invoke('get-top-group-chats', limit),

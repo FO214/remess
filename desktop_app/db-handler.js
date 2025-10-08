@@ -1088,14 +1088,14 @@ function searchGroupChatMessages(chatId, searchTerm, limit = 10, offset = 0, per
     
     // Get examples
     const examplesQuery = `
-      SELECT 
+      SELECT
         message.text,
         message.date,
         message.is_from_me,
-        ${personId && personId !== 'you' && personId !== 'all' ? 'handle.id as sender_id' : 'NULL as sender_id'}
+        handle.id as sender_id
       FROM message
       JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
-      ${personId && personId !== 'you' && personId !== 'all' ? 'JOIN handle ON message.handle_id = handle.ROWID' : ''}
+      LEFT JOIN handle ON message.handle_id = handle.ROWID
       ${whereClause}
       ORDER BY message.date DESC
       LIMIT ? OFFSET ?
@@ -1334,32 +1334,32 @@ function saveContactsCSV(contacts) {
     if (!fs.existsSync(APP_DATA_DIR)) {
       fs.mkdirSync(APP_DATA_DIR, { recursive: true });
     }
-    
+
     // Create avatars directory
     const avatarsDir = path.join(APP_DATA_DIR, 'avatars');
     if (!fs.existsSync(avatarsDir)) {
       fs.mkdirSync(avatarsDir, { recursive: true });
     }
-    
+
     console.log(`💾 Saving ${contacts.length} contacts to CSV...`);
-    
+
     let photoCount = 0;
-    
+
     // CSV format: name,phone,avatar
     const csvContent = 'name,phone,avatar\n' + contacts.map(c => {
       let avatarFilename = '';
-      
+
       // Save photo if it exists
       if (c.photo) {
         try {
-          // Clean phone number for filename
-          const cleanPhone = c.phone.replace(/[^\d]/g, '');
-          avatarFilename = `${cleanPhone}.jpg`;
+          // Clean phone/email for filename (use first 20 chars, replace special chars)
+          const cleanHandle = c.phone.replace(/[^\w]/g, '').substring(0, 20);
+          avatarFilename = `${cleanHandle}.jpg`;
           const avatarPath = path.join(avatarsDir, avatarFilename);
-          
+
           // Decode base64 and save
           const base64Data = c.photo.replace(/^data:image\/\w+;base64,/, '').replace(/\s/g, '');
-          
+
           // Validate base64 data
           if (base64Data.length > 0 && base64Data.length % 4 === 0) {
             const buffer = Buffer.from(base64Data, 'base64');
@@ -1380,14 +1380,14 @@ function saveContactsCSV(contacts) {
           avatarFilename = '';
         }
       }
-      
+
       return `"${c.name.replace(/"/g, '""')}","${c.phone}","${avatarFilename}"`;
     }).join('\n');
-    
+
     fs.writeFileSync(CONTACTS_CSV_PATH, csvContent, 'utf8');
     console.log(`✅ Saved contacts to: ${CONTACTS_CSV_PATH}`);
     console.log(`📸 Saved ${photoCount} profile pictures to: ${avatarsDir}`);
-    
+
     return { success: true, path: CONTACTS_CSV_PATH, photoCount };
   } catch (error) {
     console.error('❌ Error saving contacts CSV:', error);
@@ -1404,21 +1404,21 @@ function loadContactsCSV() {
       console.log('⚠️  No contacts CSV found');
       return [];
     }
-    
+
     console.log('📂 Loading contacts from CSV...');
     const csvContent = fs.readFileSync(CONTACTS_CSV_PATH, 'utf8');
     const lines = csvContent.split('\n');
     const avatarsDir = path.join(APP_DATA_DIR, 'avatars');
-    
+
     // Skip header row
     const contacts = [];
     let photoCount = 0;
-    
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      
-      // Parse CSV (handle quoted values) - now with avatar field
+
+      // Parse CSV (handle quoted values) - format: name,phone,avatar
       const match = line.match(/"([^"]*)","([^"]*)","([^"]*)"/);
       if (match) {
         const contact = {
@@ -1426,7 +1426,7 @@ function loadContactsCSV() {
           phone: match[2],
           avatar: match[3]
         };
-        
+
         // Load photo as base64 if it exists
         if (contact.avatar) {
           const avatarPath = path.join(avatarsDir, contact.avatar);
@@ -1445,11 +1445,11 @@ function loadContactsCSV() {
             }
           }
         }
-        
+
         contacts.push(contact);
       }
     }
-    
+
     console.log(`✅ Loaded ${contacts.length} contacts from CSV`);
     console.log(`📸 Loaded ${photoCount} profile pictures`);
     return contacts;
@@ -1917,19 +1917,20 @@ function getContactStatsByYear(contactHandle, year) {
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
         AND ${exclusionClause}
+        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) = ?
         AND chat_message_join.chat_id IN (
-          SELECT chat_id 
-          FROM chat_handle_join 
-          GROUP BY chat_id 
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
           HAVING COUNT(handle_id) = 1
         )
     `;
     const total = db.prepare(totalQuery).get(contactHandle, ...EXCLUDED_NUMBERS, year);
-    
+
     // Get sent vs received
     const sentReceivedQuery = `
-      SELECT 
+      SELECT
         SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) as sent,
         SUM(CASE WHEN message.is_from_me = 0 THEN 1 ELSE 0 END) as received
       FROM message
@@ -1939,16 +1940,17 @@ function getContactStatsByYear(contactHandle, year) {
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
         AND ${exclusionClause}
+        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) = ?
         AND chat_message_join.chat_id IN (
-          SELECT chat_id 
-          FROM chat_handle_join 
-          GROUP BY chat_id 
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
           HAVING COUNT(handle_id) = 1
         )
     `;
     const sentReceived = db.prepare(sentReceivedQuery).get(contactHandle, ...EXCLUDED_NUMBERS, year);
-    
+
     // Get first message date for this year
     const firstMessageQuery = `
       SELECT MIN(message.date) as first_date
@@ -1959,11 +1961,12 @@ function getContactStatsByYear(contactHandle, year) {
       JOIN handle ON chat_handle_join.handle_id = handle.ROWID
       WHERE handle.id = ?
         AND ${exclusionClause}
+        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
         AND strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) = ?
         AND chat_message_join.chat_id IN (
-          SELECT chat_id 
-          FROM chat_handle_join 
-          GROUP BY chat_id 
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
           HAVING COUNT(handle_id) = 1
         )
     `;
@@ -2225,11 +2228,68 @@ function getCombinedContactStats(contactHandles) {
     });
     
     // Calculate average per day
-    const daysSinceFirst = combined.firstMessageDate ? 
-      (Date.now() - (combined.firstMessageDate / 1000000 + new Date('2001-01-01').getTime())) / (1000 * 60 * 60 * 24) : 
+    const daysSinceFirst = combined.firstMessageDate ?
+      (Date.now() - (combined.firstMessageDate / 1000000 + new Date('2001-01-01').getTime())) / (1000 * 60 * 60 * 24) :
       0;
     combined.avgPerDay = daysSinceFirst > 0 ? (combined.totalMessages / daysSinceFirst).toFixed(1) : 0;
-    
+
+    // Calculate longest streak across all handles
+    // Get all message dates from all handles
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+    const exclusion = buildContactExclusionClause();
+
+    const placeholders = contactHandles.map(() => '?').join(',');
+    const streakQuery = `
+      SELECT DISTINCT date(datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) as message_date
+      FROM message
+      JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+      JOIN chat ON chat_message_join.chat_id = chat.ROWID
+      JOIN handle ON chat.ROWID IN (
+        SELECT chat_id FROM chat_handle_join WHERE handle_id = handle.ROWID
+      )
+      WHERE handle.id IN (${placeholders})
+        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+        AND chat_message_join.chat_id IN (
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
+          HAVING COUNT(handle_id) = 1
+        )
+        ${exclusion.clause}
+      ORDER BY message_date
+    `;
+    const dates = db.prepare(streakQuery).all(...contactHandles, ...exclusion.params);
+
+    let longestStreak = 0;
+    let currentStreak = 0;
+    let lastDate = null;
+
+    dates.forEach(row => {
+      if (row.message_date) {
+        const currentDate = new Date(row.message_date);
+
+        if (lastDate) {
+          const dayDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+
+          if (dayDiff === 1) {
+            currentStreak++;
+          } else {
+            longestStreak = Math.max(longestStreak, currentStreak);
+            currentStreak = 1;
+          }
+        } else {
+          currentStreak = 1;
+        }
+
+        lastDate = currentDate;
+      }
+    });
+
+    longestStreak = Math.max(longestStreak, currentStreak);
+    combined.longestStreak = longestStreak;
+
+    db.close();
+
     return combined;
   } catch (error) {
     console.error('Error getting combined contact stats:', error);
@@ -2324,7 +2384,62 @@ function getCombinedContactStatsByYear(contactHandles, year) {
       mostActiveYearCount: allStats.reduce((sum, s) => sum + s.totalMessages, 0),
       avgPerDay: (allStats.reduce((sum, s) => sum + parseFloat(s.avgPerDay), 0) / allStats.length).toFixed(1)
     };
-    
+
+    // Calculate longest streak for the specified year across all handles
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+
+    const placeholders = contactHandles.map(() => '?').join(',');
+    const streakQuery = `
+      SELECT DISTINCT date(datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) as message_date
+      FROM message
+      JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+      JOIN chat ON chat_message_join.chat_id = chat.ROWID
+      JOIN handle ON chat.ROWID IN (
+        SELECT chat_id FROM chat_handle_join WHERE handle_id = handle.ROWID
+      )
+      WHERE handle.id IN (${placeholders})
+        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+        AND strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) = ?
+        AND chat_message_join.chat_id IN (
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
+          HAVING COUNT(handle_id) = 1
+        )
+      ORDER BY message_date
+    `;
+    const dates = db.prepare(streakQuery).all(...contactHandles, year);
+
+    let longestStreak = 0;
+    let currentStreak = 0;
+    let lastDate = null;
+
+    dates.forEach(row => {
+      if (row.message_date) {
+        const currentDate = new Date(row.message_date);
+
+        if (lastDate) {
+          const dayDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+
+          if (dayDiff === 1) {
+            currentStreak++;
+          } else {
+            longestStreak = Math.max(longestStreak, currentStreak);
+            currentStreak = 1;
+          }
+        } else {
+          currentStreak = 1;
+        }
+
+        lastDate = currentDate;
+      }
+    });
+
+    longestStreak = Math.max(longestStreak, currentStreak);
+    combined.longestStreak = longestStreak;
+
+    db.close();
+
     return combined;
   } catch (error) {
     console.error('Error getting combined contact stats by year:', error);
@@ -2397,17 +2512,27 @@ function getCombinedContactEmojisByYear(contactHandles, year, limit = 10) {
 /**
  * Get reaction stats for a contact
  */
-function getContactReactions(contactHandle) {
+function getContactReactions(contactHandle, year = null) {
   try {
     if (!cloneExists()) {
       return { yourReactions: [], theirReactions: [] };
     }
 
     const db = new Database(CLONE_DB_PATH, { readonly: true });
-    
+
     // Build exclusion clause
     const exclusionClause = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
-    
+
+    // Build year filter if specified
+    let yearFilter = '';
+    if (year) {
+      const startDate = new Date(`${year}-01-01`).getTime();
+      const endDate = new Date(`${year}-12-31 23:59:59`).getTime();
+      const startTimestamp = (startDate - new Date('2001-01-01').getTime()) * 1000000;
+      const endTimestamp = (endDate - new Date('2001-01-01').getTime()) * 1000000;
+      yearFilter = `AND message.date >= ${startTimestamp} AND message.date <= ${endTimestamp}`;
+    }
+
     // Map reaction types to emoji
     // iMessage stores reactions with simpler type values
     const reactionMap = {
@@ -2441,10 +2566,10 @@ function getContactReactions(contactHandle) {
       '4': '‼️',
       '5': '❓'
     };
-    
+
     // Get reactions you sent
     const yourReactionsQuery = `
-      SELECT 
+      SELECT
         message.associated_message_type as type,
         COUNT(*) as count
       FROM message
@@ -2458,19 +2583,20 @@ function getContactReactions(contactHandle) {
         AND message.associated_message_type IS NOT NULL
         AND message.associated_message_type != 0
         AND message.associated_message_type != 3000
+        ${yearFilter}
         AND chat_message_join.chat_id IN (
-          SELECT chat_id 
-          FROM chat_handle_join 
-          GROUP BY chat_id 
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
           HAVING COUNT(handle_id) = 1
         )
       GROUP BY message.associated_message_type
       ORDER BY count DESC
     `;
-    
+
     // Get reactions they sent
     const theirReactionsQuery = `
-      SELECT 
+      SELECT
         message.associated_message_type as type,
         COUNT(*) as count
       FROM message
@@ -2484,16 +2610,17 @@ function getContactReactions(contactHandle) {
         AND message.associated_message_type IS NOT NULL
         AND message.associated_message_type != 0
         AND message.associated_message_type != 3000
+        ${yearFilter}
         AND chat_message_join.chat_id IN (
-          SELECT chat_id 
-          FROM chat_handle_join 
-          GROUP BY chat_id 
+          SELECT chat_id
+          FROM chat_handle_join
+          GROUP BY chat_id
           HAVING COUNT(handle_id) = 1
         )
       GROUP BY message.associated_message_type
       ORDER BY count DESC
     `;
-    
+
     const yourResults = db.prepare(yourReactionsQuery).all(contactHandle, ...EXCLUDED_NUMBERS);
     const theirResults = db.prepare(theirReactionsQuery).all(contactHandle, ...EXCLUDED_NUMBERS);
     
