@@ -934,15 +934,18 @@ function getGroupChatWords(chatId, limit = 20, personId = null, year = null) {
     
     const messages = db.prepare(query).all(...params);
     db.close();
-    
+
     // Common words to exclude
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
       'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
       'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you',
-      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my', 
+      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my',
       'your', 'me', 'im', 'just', 'so', 'dont', 'didnt', 'cant', 'wont', 'like', 'yeah', 'yes', 'no',
-      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not']);
-    
+      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not',
+      'don', 'ain', 've', 'll', 'won', 'doesn', 'didn', 'wasn', 'weren', 'isn', 'aren', 'hasn', 'haven',
+      'hadn', 'shouldn', 'couldn', 'wouldn', 'mightn', 'mustn', 'good', 'now', 'how', 'then', 'too',
+      'there', 'when', 'one', 'out', 'why', 'all', 'back', 'say', 'right', 'know']);
+
     // Count word frequencies
     const wordCounts = {};
     messages.forEach(msg => {
@@ -1168,7 +1171,7 @@ function getAllWords(limit = 30) {
     }
 
     const db = new Database(CLONE_DB_PATH, { readonly: true });
-    
+
     // Get all message texts (only from user, is_from_me = 1)
     const query = `
       SELECT message.text
@@ -1178,18 +1181,21 @@ function getAllWords(limit = 30) {
         AND message.text != ''
         AND message.is_from_me = 1
     `;
-    
+
     const messages = db.prepare(query).all();
-    
+
     db.close();
-    
+
     // Common words to exclude
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
       'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
       'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you',
-      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my', 
+      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my',
       'your', 'me', 'im', 'just', 'so', 'dont', 'didnt', 'cant', 'wont', 'like', 'yeah', 'yes', 'no',
-      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not']);
+      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not',
+      'don', 'ain', 've', 'll', 'won', 'doesn', 'didn', 'wasn', 'weren', 'isn', 'aren', 'hasn', 'haven',
+      'hadn', 'shouldn', 'couldn', 'wouldn', 'mightn', 'mustn', 'good', 'now', 'how', 'then', 'too',
+      'there', 'when', 'one', 'out', 'why', 'all', 'back', 'say', 'right', 'know']);
     
     // Count word frequencies
     const wordCounts = {};
@@ -1787,17 +1793,20 @@ function getContactWords(contactHandle, limit = 20, filter = 'both') {
         )
     `;
     const messages = db.prepare(query).all(contactHandle, ...EXCLUDED_NUMBERS);
-    
+
     db.close();
-    
+
     // Common words to exclude
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
       'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
       'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you',
-      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my', 
+      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my',
       'your', 'me', 'im', 'just', 'so', 'dont', 'didnt', 'cant', 'wont', 'like', 'yeah', 'yes', 'no',
-      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not']);
-    
+      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not',
+      'don', 'ain', 've', 'll', 'won', 'doesn', 'didn', 'wasn', 'weren', 'isn', 'aren', 'hasn', 'haven',
+      'hadn', 'shouldn', 'couldn', 'wouldn', 'mightn', 'mustn', 'good', 'now', 'how', 'then', 'too',
+      'there', 'when', 'one', 'out', 'why', 'all', 'back', 'say', 'right', 'know']);
+
     // Count word frequencies
     const wordCounts = {};
     messages.forEach(msg => {
@@ -2080,16 +2089,19 @@ function getContactWordsByYear(contactHandle, year, limit = 20) {
         )
     `;
     const messages = db.prepare(query).all(contactHandle, ...EXCLUDED_NUMBERS, year);
-    
+
     db.close();
-    
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
       'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
       'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you',
-      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my', 
+      'he', 'she', 'it', 'we', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'am', 'my',
       'your', 'me', 'im', 'just', 'so', 'dont', 'didnt', 'cant', 'wont', 'like', 'yeah', 'yes', 'no',
-      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not']);
-    
+      'ok', 'okay', 'lol', 'haha', 'oh', 'ah', 'um', 'uh', 'gonna', 'wanna', 'gotta', 'get', 'got', 'not',
+      'don', 'ain', 've', 'll', 'won', 'doesn', 'didn', 'wasn', 'weren', 'isn', 'aren', 'hasn', 'haven',
+      'hadn', 'shouldn', 'couldn', 'wouldn', 'mightn', 'mustn', 'good', 'now', 'how', 'then', 'too',
+      'there', 'when', 'one', 'out', 'why', 'all', 'back', 'say', 'right', 'know']);
+
     const wordCounts = {};
     messages.forEach(msg => {
       if (msg.text) {
