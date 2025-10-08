@@ -131,7 +131,8 @@ async function init() {
   try {
     setupEventListeners();
     checkAuthStatus();
-    
+    initShareStats();
+
     // Set version tag
     if (window.electronAPI && window.electronAPI.getVersion) {
       try {
@@ -145,14 +146,14 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.10';
+          versionTag.textContent = 'v0.1.11';
         }
       }
     }
-    
+
     // Setup auto-update listeners
     setupUpdateListeners();
-    
+
     // Hide app loading screen after everything is initialized
     const appLoading = document.getElementById('appLoading');
     if (appLoading) {
@@ -721,8 +722,8 @@ async function loadRealData() {
               cursor: pointer;
             `;
             notice.innerHTML = `
-              <strong>Update v0.1.10</strong><br>
-              Please re-import contacts for email support<br>
+              <strong>Update v0.1.11</strong><br>
+              New features and improvements available<br>
               <span style="color: var(--blue); text-decoration: underline; margin-top: 8px; display: inline-block;">Install Now</span>
             `;
             notice.onclick = () => {
@@ -3287,6 +3288,711 @@ async function handleWordFilterChange(filter) {
 // Helper function to escape special regex characters
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Share Stats Functionality
+function initShareStats() {
+  const shareBtn = document.getElementById('shareStatsBtn');
+  const shareModal = document.getElementById('shareModal');
+  const shareModalOverlay = document.getElementById('shareModalOverlay');
+  const shareModalClose = document.getElementById('shareModalClose');
+  const shareCanvas = document.getElementById('shareCanvas');
+
+  if (!shareBtn || !shareModal) return;
+
+  // Open modal and generate card
+  shareBtn.addEventListener('click', async () => {
+    shareModal.style.display = 'flex';
+
+    // Show loading, hide canvas
+    const loading = document.getElementById('shareLoading');
+    const canvas = document.getElementById('shareCanvas');
+    loading.style.display = 'flex';
+    canvas.style.display = 'none';
+
+    // Generate card
+    await generateStatsCard();
+
+    // Hide loading, show canvas
+    loading.style.display = 'none';
+    canvas.style.display = 'block';
+  });
+
+  // Close modal handlers
+  const closeModal = () => {
+    shareModal.style.display = 'none';
+  };
+
+  shareModalClose.addEventListener('click', closeModal);
+  shareModalOverlay.addEventListener('click', closeModal);
+
+  // Share option handlers
+  document.getElementById('shareLinkedIn').addEventListener('click', () => shareToLinkedIn());
+  document.getElementById('shareX').addEventListener('click', () => shareToX());
+  document.getElementById('shareMessages').addEventListener('click', () => shareToMessages());
+  document.getElementById('shareInstagram').addEventListener('click', () => shareToInstagram());
+  document.getElementById('saveImage').addEventListener('click', () => saveStatsImage());
+}
+
+async function generateStatsCard() {
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Set canvas size with padding for card effect
+  const cardWidth = 1080;
+  const cardHeight = 1250;
+  const padding = 50;
+  canvas.width = cardWidth + (padding * 2);
+  canvas.height = cardHeight + (padding * 2);
+
+  // Background - very light gray for subtle contrast
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw card shadow
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+  ctx.shadowBlur = 25;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 8;
+
+  // Draw card background with rounded corners
+  ctx.fillStyle = '#f5f1ed';
+  ctx.beginPath();
+  ctx.roundRect(padding, padding, cardWidth, cardHeight, 16);
+  ctx.fill();
+
+  // Reset shadow for content
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Offset all content by padding
+  ctx.save();
+  ctx.translate(padding, padding);
+
+  // Use userData which is already loaded globally
+  const totalTexts = userData?.stats?.totalMessages || 0;
+  const sentCount = userData?.stats?.sentMessages || 0;
+  const receivedCount = userData?.stats?.receivedMessages || 0;
+
+  // Get messages by year for graph
+  const messagesByYear = userData?.messagesByYear || [];
+
+  // Get top words (top 10)
+  let topWords = [];
+  try {
+    const wordsResult = await window.electronAPI.getAllWords(10);
+    if (wordsResult.success && wordsResult.words) {
+      topWords = wordsResult.words.map(w => w.word);
+    }
+  } catch (error) {
+    console.error('Failed to get words:', error);
+  }
+
+  // Get top contacts (top 5) and match with contact names
+  let topContacts = [];
+  if (userData?.topContacts && Array.isArray(userData.topContacts)) {
+    // Load imported contacts from localStorage or CSV
+    let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
+
+    // If not in localStorage, try loading from CSV
+    if (importedContacts.length === 0) {
+      const loadResult = await window.electronAPI.loadContacts();
+      if (loadResult.success && loadResult.contacts.length > 0) {
+        importedContacts = loadResult.contacts;
+        localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
+      }
+    }
+
+    // Helper function to match contact handle with imported contacts
+    function findContactMatch(handle, importedContacts) {
+      if (!handle || importedContacts.length === 0) return null;
+
+      if (handle.includes('@')) {
+        return importedContacts.find(c =>
+          c.phone && c.phone.toLowerCase() === handle.toLowerCase()
+        );
+      } else {
+        const cleaned = handle.replace(/\D/g, '');
+        if (cleaned.length < 10) return null;
+
+        return importedContacts.find(c => {
+          if (c.phone.includes('@')) return false;
+          const contactCleaned = c.phone.replace(/\D/g, '');
+          if (contactCleaned.length < 10) return false;
+          return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+        });
+      }
+    }
+
+    // Match contacts with names and photos
+    const matchedContacts = userData.topContacts.map(contact => {
+      const match = findContactMatch(contact.contact, importedContacts);
+      return {
+        ...contact,
+        displayName: match?.name || contact.displayName || contact.contact,
+        contactPhoto: match?.photo || null,
+        messageCount: contact.message_count || 0
+      };
+    });
+
+    // Consolidate contacts with same display name
+    const consolidatedMap = new Map();
+    matchedContacts.forEach(contact => {
+      const key = contact.displayName.toLowerCase();
+
+      if (consolidatedMap.has(key)) {
+        const existing = consolidatedMap.get(key);
+        existing.messageCount += contact.messageCount;
+        existing.handles.push(contact.contact);
+      } else {
+        consolidatedMap.set(key, {
+          ...contact,
+          handles: [contact.contact]
+        });
+      }
+    });
+
+    // Convert to array, sort by message count, and take top 5
+    topContacts = Array.from(consolidatedMap.values())
+      .sort((a, b) => b.messageCount - a.messageCount)
+      .slice(0, 5);
+  }
+
+  // Title - top left
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = '700 56px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.textAlign = 'left';
+  ctx.fillText('My Life in Messages', 60, 110);
+
+  // Load and draw app icon in top right (of inner card)
+  const icon = new Image();
+  icon.src = 'icon.png';
+  await new Promise((resolve) => {
+    icon.onload = () => {
+      // Draw icon with rounded corners - bigger
+      const iconSize = 160;
+      const iconX = 1080 - iconSize - 40; // Closer to corner
+      const iconY = 40;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(iconX, iconY, iconSize, iconSize, 32);
+      ctx.clip();
+      ctx.drawImage(icon, iconX, iconY, iconSize, iconSize);
+      ctx.restore();
+      resolve();
+    };
+    icon.onerror = () => resolve();
+  });
+
+  // Big stat - Total Messages
+  ctx.font = '700 140px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillText(totalTexts.toLocaleString(), 60, 280);
+  ctx.font = '24px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#666666';
+  ctx.fillText('total messages', 65, 315);
+
+  // Sent vs Received with split bar - bigger
+  const barY = 385;
+  const barHeight = 20;
+  const barWidth = 960;
+  const sentPercent = totalTexts > 0 ? sentCount / totalTexts : 0.5;
+
+  // Draw rounded split bar
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(60, barY, barWidth, barHeight, 10);
+  ctx.clip();
+
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(60, barY, barWidth * sentPercent, barHeight);
+
+  ctx.fillStyle = '#cccccc';
+  ctx.fillRect(60 + (barWidth * sentPercent), barY, barWidth * (1 - sentPercent), barHeight);
+  ctx.restore();
+
+  // Labels below bar
+  ctx.textAlign = 'left';
+  ctx.font = '600 36px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillText(sentCount.toLocaleString(), 60, barY + 65);
+  ctx.font = '18px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#999999';
+  ctx.fillText('sent', 60, barY + 88);
+
+  ctx.textAlign = 'right';
+  ctx.font = '600 36px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillText(receivedCount.toLocaleString(), 1020, barY + 65);
+  ctx.font = '18px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#999999';
+  ctx.fillText('received', 1020, barY + 88);
+
+  // Messages over time graph - smooth line
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = '600 28px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillText('Messages Over Time', 60, 530);
+
+  if (messagesByYear && messagesByYear.length > 0) {
+    const graphX = 90;
+    const graphY = 580;
+    const graphWidth = 930;
+    const graphHeight = 180;
+
+    // Convert to array if needed
+    let yearData = messagesByYear;
+    if (!Array.isArray(messagesByYear)) {
+      yearData = Object.entries(messagesByYear).map(([year, count]) => ({
+        year: parseInt(year),
+        count: count
+      }));
+    }
+    yearData.sort((a, b) => a.year - b.year);
+
+    const maxCount = Math.max(...yearData.map(d => d.count));
+    const minCount = Math.min(...yearData.map(d => d.count));
+
+    // Draw Y-axis labels
+    ctx.fillStyle = '#999999';
+    ctx.font = '14px -apple-system, BlinkMacSystemFont, Inter';
+    ctx.textAlign = 'right';
+
+    // Max value at top
+    const maxLabel = maxCount >= 1000 ? `${(maxCount / 1000).toFixed(1)}k` : maxCount.toString();
+    ctx.fillText(maxLabel, graphX - 10, graphY + 5);
+
+    // Mid value
+    const midCount = Math.floor((maxCount + minCount) / 2);
+    const midLabel = midCount >= 1000 ? `${(midCount / 1000).toFixed(1)}k` : midCount.toString();
+    ctx.fillText(midLabel, graphX - 10, graphY + graphHeight / 2 + 5);
+
+    // Min value at bottom
+    const minLabel = minCount >= 1000 ? `${(minCount / 1000).toFixed(1)}k` : minCount.toString();
+    ctx.fillText(minLabel, graphX - 10, graphY + graphHeight + 5);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+    ctx.lineWidth = 1;
+
+    // Top grid line
+    ctx.beginPath();
+    ctx.moveTo(graphX, graphY);
+    ctx.lineTo(graphX + graphWidth, graphY);
+    ctx.stroke();
+
+    // Middle grid line
+    ctx.beginPath();
+    ctx.moveTo(graphX, graphY + graphHeight / 2);
+    ctx.lineTo(graphX + graphWidth, graphY + graphHeight / 2);
+    ctx.stroke();
+
+    // Bottom grid line
+    ctx.beginPath();
+    ctx.moveTo(graphX, graphY + graphHeight);
+    ctx.lineTo(graphX + graphWidth, graphY + graphHeight);
+    ctx.stroke();
+
+    // Create smooth curve points
+    const points = [];
+    yearData.forEach((data, i) => {
+      const x = graphX + (i / (yearData.length - 1)) * graphWidth;
+      const normalizedHeight = maxCount > minCount ? (data.count - minCount) / (maxCount - minCount) : 0.5;
+      const y = graphY + graphHeight - (normalizedHeight * graphHeight * 0.9);
+      points.push({ x, y });
+    });
+
+    // Draw fill area
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, graphY + graphHeight);
+    ctx.lineTo(points[0].x, points[0].y);
+
+    // Use bezier curves for ultra smooth lines
+    for (let i = 0; i < points.length - 1; i++) {
+      const cp1x = points[i].x + (points[i + 1].x - points[i].x) / 3;
+      const cp1y = points[i].y;
+      const cp2x = points[i + 1].x - (points[i + 1].x - points[i].x) / 3;
+      const cp2y = points[i + 1].y;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, points[i + 1].x, points[i + 1].y);
+    }
+
+    ctx.lineTo(points[points.length - 1].x, graphY + graphHeight);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(26, 26, 26, 0.06)';
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const cp1x = points[i].x + (points[i + 1].x - points[i].x) / 3;
+      const cp1y = points[i].y;
+      const cp2x = points[i + 1].x - (points[i + 1].x - points[i].x) / 3;
+      const cp2y = points[i + 1].y;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, points[i + 1].x, points[i + 1].y);
+    }
+
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Draw dots on data points
+    points.forEach((point, i) => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fill();
+      ctx.strokeStyle = '#f5f1ed';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+
+    // Year labels (X-axis)
+    ctx.fillStyle = '#999999';
+    ctx.font = '16px -apple-system, BlinkMacSystemFont, Inter';
+    ctx.textAlign = 'left';
+    ctx.fillText(yearData[0].year, graphX, graphY + graphHeight + 25);
+    ctx.textAlign = 'right';
+    ctx.fillText(yearData[yearData.length - 1].year, graphX + graphWidth, graphY + graphHeight + 25);
+  }
+
+  // Top Words & Contacts
+  const sectionY = 830;
+
+  // Top Words - styled like dashboard
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = '600 28px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.textAlign = 'left';
+  ctx.fillText('Top Words', 60, sectionY);
+
+  // Draw words as pills with borders (top 5 only) - centered with nice spacing
+  // First pass: calculate total width needed
+  const pillSizes = [];
+  let totalPillWidth = 0;
+  const wordGap = 18; // Fixed nice spacing
+
+  topWords.slice(0, 5).forEach((word, i) => {
+    let fontSize, padding;
+    if (i === 0) {
+      fontSize = 36;
+      padding = 26;
+    } else if (i === 1) {
+      fontSize = 32;
+      padding = 24;
+    } else {
+      fontSize = 28;
+      padding = 22;
+    }
+
+    ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, Inter`;
+    const textWidth = ctx.measureText(word).width;
+    const pillWidth = textWidth + (padding * 2);
+    const pillHeight = fontSize + (padding * 1.3);
+
+    pillSizes.push({ word, fontSize, padding, pillWidth, pillHeight });
+    totalPillWidth += pillWidth;
+  });
+
+  // Calculate total width with gaps and center it on inner card
+  const totalWidth = totalPillWidth + (wordGap * (pillSizes.length - 1));
+  let wordX = (1080 - totalWidth) / 2; // Center on inner card (1080px)
+  let wordY = sectionY + 55;
+
+  pillSizes.forEach((pill, i) => {
+    const pillX = wordX;
+    const pillY = wordY - pill.fontSize - 10;
+
+    // Draw pill shadow
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.06)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 3;
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pill.pillWidth, pill.pillHeight, pill.pillHeight / 2);
+    ctx.fill();
+
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Draw pill border
+    ctx.strokeStyle = '#d0d0d0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pill.pillWidth, pill.pillHeight, pill.pillHeight / 2);
+    ctx.stroke();
+
+    // Draw word text
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = `700 ${pill.fontSize}px -apple-system, BlinkMacSystemFont, Inter`;
+    ctx.textAlign = 'center';
+    ctx.fillText(pill.word, wordX + pill.pillWidth / 2, wordY);
+
+    wordX += pill.pillWidth + wordGap;
+  });
+
+  // Top Contacts - horizontal layout with profile pictures and message counts
+  const contactsStartY = wordY + 80;
+
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = '600 28px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.textAlign = 'left';
+  ctx.fillText('Top Contacts', 60, contactsStartY);
+
+  // Draw contacts horizontally - centered on inner card
+  const avatarSize = 75;
+  const blockWidth = 165;
+  const blockHeight = 165;
+  const contactGap = 20;
+  const totalContactsWidth = (blockWidth * 5) + (contactGap * 4);
+  const contactsStartX = (1080 - totalContactsWidth) / 2; // Center on inner card (1080px)
+  const contactsY = contactsStartY + 45;
+
+  const contactPromises = topContacts.slice(0, 5).map((contact, i) => {
+    return new Promise((resolve) => {
+      const blockX = contactsStartX + (i * (blockWidth + contactGap));
+      const blockY = contactsY;
+
+      // Draw block background with subtle shadow effect
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4;
+      ctx.beginPath();
+      ctx.roundRect(blockX, blockY, blockWidth, blockHeight, 20);
+      ctx.fill();
+
+      // Reset shadow
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Draw block border
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(blockX, blockY, blockWidth, blockHeight, 20);
+      ctx.stroke();
+
+      const avatarX = blockX + (blockWidth - avatarSize) / 2;
+      const avatarY = blockY + 22;
+
+      // Try to load profile picture
+      if (contact.contactPhoto) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          // Draw circular avatar
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(img, avatarX, avatarY, avatarSize, avatarSize);
+          ctx.restore();
+
+          // Draw border
+          ctx.beginPath();
+          ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+          ctx.strokeStyle = '#1a1a1a';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          resolve();
+        };
+        img.onerror = () => {
+          // Draw initials fallback
+          drawContactInitials(ctx, contact, avatarX, avatarY, avatarSize);
+          resolve();
+        };
+        img.src = contact.contactPhoto;
+      } else {
+        // Draw initials fallback
+        drawContactInitials(ctx, contact, avatarX, avatarY, avatarSize);
+        resolve();
+      }
+
+      // Draw name (centered below avatar)
+      const nameY = avatarY + avatarSize + 20;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = '700 17px -apple-system, BlinkMacSystemFont, Inter';
+      ctx.textAlign = 'center';
+      const name = contact.displayName || contact.contact || 'Unknown';
+      // Limit name length
+      const displayName = name.length > 16 ? name.substring(0, 13) + '...' : name;
+      ctx.fillText(displayName, blockX + blockWidth / 2, nameY);
+
+      // Draw message count (centered below name)
+      const messageCount = contact.messageCount || 0;
+      ctx.fillStyle = '#888888';
+      ctx.font = '16px -apple-system, BlinkMacSystemFont, Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${messageCount.toLocaleString()} messages`, blockX + blockWidth / 2, nameY + 24);
+    });
+  });
+
+  await Promise.all(contactPromises);
+
+  // Helper function to draw initials
+  function drawContactInitials(ctx, contact, x, y, size) {
+    const name = contact.displayName || contact.contact || 'Unknown';
+    const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+    // Draw circle background
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw initials
+    ctx.fillStyle = '#f5f1ed';
+    ctx.font = `700 ${size * 0.4}px -apple-system, BlinkMacSystemFont, Inter`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initials, x + size / 2, y + size / 2);
+  }
+
+  // Footer
+  ctx.textAlign = 'center';
+  ctx.font = '22px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.fillStyle = '#999999';
+  ctx.fillText('remess.me', 1080 / 2, 1250 - 40);
+
+  // Restore context (undo the translate)
+  ctx.restore();
+
+  // Draw subtle border around card
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(50, 50, 1080, 1250, 16);
+  ctx.stroke();
+}
+
+function showClipboardNotification() {
+  const notice = document.getElementById('shareClipboardNotice');
+  if (notice) {
+    notice.style.display = 'block';
+  }
+}
+
+async function shareToLinkedIn() {
+  const canvas = document.getElementById('shareCanvas');
+  canvas.toBlob(async (blob) => {
+    try {
+      // Copy to clipboard FIRST before switching contexts
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      // Show notification
+      showClipboardNotification();
+
+      const buffer = await blob.arrayBuffer();
+      const result = await window.electron.saveStatsImage(buffer);
+      if (result.success) {
+        // Open LinkedIn compose post page
+        await window.electron.openURL('https://www.linkedin.com/feed/?shareActive=true');
+      }
+    } catch (err) {
+      console.error('Failed to share to LinkedIn:', err);
+    }
+  });
+}
+
+async function shareToX() {
+  const canvas = document.getElementById('shareCanvas');
+  canvas.toBlob(async (blob) => {
+    try {
+      // Copy to clipboard FIRST before switching contexts
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      // Show notification
+      showClipboardNotification();
+
+      const buffer = await blob.arrayBuffer();
+      const result = await window.electron.saveStatsImage(buffer);
+      if (result.success) {
+        // Open X/Twitter in browser
+        await window.electron.openURL('https://x.com/compose/post');
+      }
+    } catch (err) {
+      console.error('Failed to share to X:', err);
+    }
+  });
+}
+
+async function shareToMessages() {
+  const canvas = document.getElementById('shareCanvas');
+  canvas.toBlob(async (blob) => {
+    try {
+      // Copy to clipboard FIRST before switching contexts
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      // Show notification
+      showClipboardNotification();
+
+      const buffer = await blob.arrayBuffer();
+      const result = await window.electron.saveStatsImage(buffer);
+      if (result.success) {
+        // Open Messages app with the image path
+        await window.electron.openMessages(result.path);
+      }
+    } catch (err) {
+      console.error('Failed to share to Messages:', err);
+    }
+  });
+}
+
+async function shareToInstagram() {
+  const canvas = document.getElementById('shareCanvas');
+  canvas.toBlob(async (blob) => {
+    try {
+      // Copy to clipboard FIRST before switching contexts
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+
+      // Show notification
+      showClipboardNotification();
+
+      const buffer = await blob.arrayBuffer();
+      const result = await window.electron.saveStatsImage(buffer);
+      if (result.success) {
+        // Open Instagram direct messages page
+        await window.electron.openURL('https://www.instagram.com/direct/inbox/');
+      }
+    } catch (err) {
+      console.error('Failed to share to Instagram:', err);
+    }
+  });
+}
+
+async function saveStatsImage() {
+  const canvas = document.getElementById('shareCanvas');
+  canvas.toBlob(async (blob) => {
+    try {
+      const buffer = await blob.arrayBuffer();
+      const result = await window.electron.saveStatsImage(buffer);
+      if (result.success) {
+        // Show success and reveal in Finder
+        await window.electron.revealInFinder(result.path);
+      }
+    } catch (err) {
+      console.error('Failed to save image:', err);
+    }
+  });
 }
 
 // Start the app when DOM is ready

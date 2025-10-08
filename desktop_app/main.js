@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const fs = require('fs');
+const { exec, execSync } = require('child_process');
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -355,6 +357,73 @@ ipcMain.handle('get-group-chat-reactions', async (event, chatId, personId = null
   } catch (error) {
     console.error('Error getting group chat reactions:', error);
     return { success: false, error: error.message, yourReactions: [], theirReactions: [] };
+  }
+});
+
+// Save stats image
+ipcMain.handle('save-stats-image', async (event, buffer) => {
+  try {
+    const downloadsPath = app.getPath('downloads');
+    const fileName = `remess-stats.png`;
+    const filePath = path.join(downloadsPath, fileName);
+
+    // Convert ArrayBuffer to Buffer
+    const imageBuffer = Buffer.from(buffer);
+
+    // Delete existing file if it exists
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Write file (will overwrite if exists)
+    fs.writeFileSync(filePath, imageBuffer);
+
+    return { success: true, path: filePath };
+  } catch (error) {
+    console.error('Error saving stats image:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Open Messages app with image (macOS only)
+ipcMain.handle('open-messages', async (event, imagePath) => {
+  try {
+    if (process.platform === 'darwin') {
+      // Escape the path properly for shell command
+      const escapedPath = imagePath.replace(/"/g, '\\"');
+
+      // Open the image file with Messages app - this will attach it to a new message
+      execSync(`open -a Messages "${escapedPath}"`, { encoding: 'utf8' });
+
+      return { success: true };
+    } else {
+      return { success: false, error: 'Messages app is only available on macOS' };
+    }
+  } catch (error) {
+    console.error('Error opening Messages:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Open URL in default browser
+ipcMain.handle('open-url', async (event, url) => {
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('Error opening URL:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Reveal file in Finder
+ipcMain.handle('reveal-in-finder', async (event, filePath) => {
+  try {
+    shell.showItemInFolder(filePath);
+    return { success: true };
+  } catch (error) {
+    console.error('Error revealing in Finder:', error);
+    return { success: false, error: error.message };
   }
 });
 

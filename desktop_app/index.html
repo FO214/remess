@@ -325,6 +325,14 @@
         <h1>Remess</h1>
       </div>
       <div class="header-right">
+        <button class="header-action-btn share-btn" id="shareStatsBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+          <span>Share</span>
+        </button>
         <button class="header-action-btn refresh-btn" id="refreshDataBtn" title="Refresh data from iMessage">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -357,7 +365,7 @@
     <!-- Main Content -->
     <main class="dashboard-main">
       <div class="welcome-section">
-        <h2 class="section-title">Your Texting Stats</h2>
+        <h2 class="section-title">Your Life in Messages</h2>
         <p class="section-subtitle">All the details about your messages</p>
       </div>
 
@@ -714,6 +722,66 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Share Stats Modal -->
+  <div class="share-modal" id="shareModal" style="display: none;">
+    <div class="share-modal-overlay" id="shareModalOverlay"></div>
+    <div class="share-modal-content">
+      <button class="share-modal-close" id="shareModalClose">&times;</button>
+      <h2>Share your messaging story</h2>
+
+      <!-- Stats Card Preview -->
+      <div class="share-card-preview" id="shareCardPreview">
+        <div class="share-loading" id="shareLoading">
+          <div class="share-loading-spinner"></div>
+        </div>
+        <canvas id="shareCanvas" width="1200" height="1200" style="display: none;"></canvas>
+      </div>
+
+      <!-- Clipboard info - always visible -->
+      <div class="share-clipboard-info">
+        Image will be copied to clipboard and the app will open
+      </div>
+
+      <!-- Clipboard notification - shows after click -->
+      <div class="share-clipboard-notice" id="shareClipboardNotice" style="display: none;">
+        ✓
+      </div>
+
+      <!-- Share Options -->
+      <div class="share-options">
+        <button class="share-option-btn share-icon-only" id="shareLinkedIn" title="LinkedIn">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/>
+          </svg>
+        </button>
+        <button class="share-option-btn share-icon-only" id="shareX" title="X (Twitter)">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </button>
+        <button class="share-option-btn share-icon-only" id="shareMessages" title="Messages">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+        </button>
+        <button class="share-option-btn share-icon-only" id="shareInstagram" title="Instagram">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+            <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+          </svg>
+        </button>
+        <button class="share-option-btn share-icon-only" id="saveImage" title="Save Image">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>
