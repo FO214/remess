@@ -2769,3 +2769,194 @@ body {
   transform: translateX(2px);
 }
 
+.share-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.share-modal-content {
+  position: relative;
+  background: var(--pure-white);
+  border-radius: 24px;
+  padding: 40px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.share-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: var(--medium-gray);
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.share-modal-close:hover {
+  background: var(--off-white);
+  color: var(--black);
+}
+
+.share-modal-content h2 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 30px;
+  color: var(--black);
+}
+
+.share-card-preview {
+  background: var(--off-white);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#shareCanvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  /* Crop the canvas to hide the padding/border in preview */
+  object-fit: cover;
+  object-position: center;
+  width: calc(100% - 100px);
+  margin: 0 50px;
+}
+
+.share-clipboard-info {
+  text-align: center;
+  color: var(--dark-gray);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+
+.share-clipboard-notice {
+  text-align: center;
+  color: var(--black);
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.share-options {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.share-option-btn {
+  background: var(--off-white);
+  color: var(--black);
+  border: 1.5px solid var(--light-gray);
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.share-option-btn:hover {
+  background: var(--black);
+  color: var(--pure-white);
+  border-color: var(--black);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.share-option-btn:active {
+  transform: translateY(-1px);
+}
+
+.share-option-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* Loading state for share card */
+.share-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.share-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--light-gray);
+  border-top-color: var(--black);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Share button styling */
+.share-btn {
+  width: auto;
+  padding: 0 16px;
+  gap: 8px;
+  background: var(--off-white);
+}
+
+.share-btn span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--black);
+}

@@ -35,3 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchGroupChatMessages: (chatId, searchTerm, limit, offset, personId) => ipcRenderer.invoke('search-group-chat-messages', chatId, searchTerm, limit, offset, personId),
   getGroupChatReactions: (chatId, personId, year) => ipcRenderer.invoke('get-group-chat-reactions', chatId, personId, year)
 });
+
+contextBridge.exposeInMainWorld('electron', {
+  saveStatsImage: (buffer) => ipcRenderer.invoke('save-stats-image', buffer),
+  openMessages: (imagePath) => ipcRenderer.invoke('open-messages', imagePath),
+  openURL: (url) => ipcRenderer.invoke('open-url', url),
+  revealInFinder: (path) => ipcRenderer.invoke('reveal-in-finder', path)
+});

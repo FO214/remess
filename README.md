@@ -9,7 +9,7 @@
   ---
   
   <p>Ever wondered who you text the most? What year you went OFF?<br/>
-  See your <strong>ENTIRE</strong> messaging history—every text, every year, your whole story.</p>
+  See your <strong>ENTIRE</strong> messaging history every text, every year, your whole story.</p>
   
   <p><em>Made with ❤️ as a weekend vibecoded project</em></p>
   
