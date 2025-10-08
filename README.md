@@ -17,9 +17,9 @@
   
   ### 📦 Desktop App
   <p>The macOS desktop app is available in the <code>desktop_app/</code> directory.</p>
-  <p><a href="https://github.com/FO214/remess/releases/latest">Download Latest Release →</a></p>
-  
+  <p><a href="https://remess.me">Download at remess.me →</a></p>
+
   ### 🌐 Web App
-  <p>Coming soon in the <code>web_app/</code> directory.</p>
+  <p>Available now at <a href="https://remess.me">remess.me</a></p>
   
 </div>
