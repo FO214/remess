@@ -1,3 +1,17 @@
+// Suppress browser console warnings about corrupt image data
+// These are handled gracefully with onerror fallbacks to initials
+const originalConsoleError = console.error;
+console.error = function(...args) {
+  const errorMsg = args.join(' ');
+  // Suppress corrupt JPEG/image warnings - we handle these with onerror
+  if (errorMsg.includes('Corrupt JPEG') ||
+      errorMsg.includes('Corrupt PNG') ||
+      errorMsg.includes('premature end of data')) {
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
 // Sample messaging data (simulated analytics)
 const sampleData = {
   user: {
@@ -131,7 +145,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.9';
+          versionTag.textContent = 'v0.1.10';
         }
       }
     }
@@ -514,23 +528,24 @@ function showImportScreen() {
 function parseVCard(vcardText) {
   const contacts = [];
   const vcards = vcardText.split('BEGIN:VCARD');
-  
+
   for (const vcard of vcards) {
     if (!vcard.trim()) continue;
-    
+
     const lines = vcard.split('\n');
     let name = '';
     const phones = [];
+    const emails = [];
     let photo = null;
     let photoData = '';
     let isCollectingPhoto = false;
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      
+
       if (line.startsWith('FN:')) {
         name = line.substring(3).trim();
-      } 
+      }
       else if (line.includes('TEL')) {
         const phoneMatch = line.match(/:([\d\s\+\-\(\)]+)$/);
         if (phoneMatch) {
@@ -538,12 +553,33 @@ function parseVCard(vcardText) {
           phones.push(phone);
         }
       }
+      else if (line.includes('EMAIL')) {
+        const emailMatch = line.match(/:(.+)$/);
+        if (emailMatch) {
+          const email = emailMatch[1].trim();
+          emails.push(email);
+        }
+      }
       else if (line.startsWith('PHOTO;') || line.startsWith('PHOTO:')) {
         // Start collecting photo data
         isCollectingPhoto = true;
+
+        // Extract format from PHOTO field (e.g., PHOTO;ENCODING=BASE64;JPEG: or PHOTO;TYPE=JPEG:)
+        let photoFormat = 'jpeg'; // default
+        if (line.includes('PNG') || line.includes('png')) {
+          photoFormat = 'png';
+        } else if (line.includes('GIF') || line.includes('gif')) {
+          photoFormat = 'gif';
+        } else if (line.includes('WEBP') || line.includes('webp')) {
+          photoFormat = 'webp';
+        }
+
         const colonIndex = line.indexOf(':');
         if (colonIndex > -1) {
           photoData = line.substring(colonIndex + 1).trim();
+          // Store format with the data
+          if (!photo) photo = {};
+          photo.format = photoFormat;
         }
       }
       else if (isCollectingPhoto) {
@@ -551,27 +587,81 @@ function parseVCard(vcardText) {
         if (line.startsWith('END:VCARD') || line.includes(':')) {
           // Stop collecting if we hit another field
           isCollectingPhoto = false;
-          if (photoData) {
-            photo = photoData;
+          if (photoData && photo && photo.format) {
+            photo.data = photoData;
+          } else if (photoData) {
+            // Fallback if no format was detected
+            photo = { data: photoData, format: 'jpeg' };
           }
         } else {
           photoData += line.trim();
         }
       }
     }
-    
+
     // Finalize photo if we were still collecting
     if (isCollectingPhoto && photoData) {
-      photo = photoData;
+      if (photo && photo.format) {
+        photo.data = photoData;
+      } else {
+        photo = { data: photoData, format: 'jpeg' };
+      }
     }
-    
-    if (name && phones.length > 0) {
-      phones.forEach(phone => {
-        contacts.push({ name, phone, photo });
+
+    // Create separate contact entries for each phone/email
+    if (name && (phones.length > 0 || emails.length > 0)) {
+      // Combine all phones and emails as separate entries
+      const allHandles = [...phones, ...emails];
+
+      allHandles.forEach(handle => {
+        // Convert photo to data URL with proper format
+        let photoUrl = null;
+        if (photo && photo.data) {
+          try {
+            // Clean the base64 data (remove any whitespace/newlines)
+            let cleanedData = photo.data.replace(/\s/g, '');
+
+            // Validate it's not empty and has valid base64 characters
+            if (cleanedData.length > 0) {
+              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+              if (base64Regex.test(cleanedData)) {
+                // Ensure proper padding
+                const paddingNeeded = (4 - (cleanedData.length % 4)) % 4;
+                cleanedData += '='.repeat(paddingNeeded);
+
+                // Just verify it can be decoded, but allow partial/incomplete images
+                try {
+                  const binaryString = atob(cleanedData);
+
+                  // Only check for valid start signature - don't reject incomplete images
+                  const hasValidStart =
+                    binaryString.startsWith('\xFF\xD8\xFF') || // JPEG start
+                    binaryString.startsWith('\x89PNG') || // PNG start (relaxed check)
+                    binaryString.startsWith('GIF87a') ||
+                    binaryString.startsWith('GIF89a') ||
+                    binaryString.startsWith('RIFF');
+
+                  if (hasValidStart) {
+                    // Let the browser try to render it, even if incomplete
+                    // The onerror handler will catch truly unrenderable images
+                    photoUrl = `data:image/${photo.format};base64,${cleanedData}`;
+                  }
+                } catch (decodeError) {
+                  // Can't decode at all - skip this image
+                  photoUrl = null;
+                }
+              }
+            }
+          } catch (e) {
+            photoUrl = null;
+          }
+        }
+
+        contacts.push({ name, phone: handle, photo: photoUrl });
       });
     }
   }
-  
+
   return contacts;
 }
 
@@ -597,17 +687,67 @@ async function loadRealData() {
       userData.messagesByYear = result.stats.messagesByYear;
       userData.topContacts = result.stats.topContacts;
       
+      // Check CSV version and clear old contacts if needed
+      const CSV_VERSION = '0.1.10';
+      const storedVersion = localStorage.getItem('remess_csv_version');
+
       // Preload contacts data before showing any UI
       let importedContacts = JSON.parse(localStorage.getItem('remess_contacts') || '[]');
+      const hadContactsBefore = importedContacts.length > 0;
+
+      // Clear contacts if version mismatch
+      if (storedVersion !== CSV_VERSION) {
+        console.log('CSV schema updated - clearing old contacts');
+        importedContacts = [];
+        localStorage.removeItem('remess_contacts');
+        localStorage.setItem('remess_csv_version', CSV_VERSION);
+
+        // Show minimalistic update notice ONLY if they had contacts before (old version users)
+        if (storedVersion && hadContactsBefore) {
+          setTimeout(() => {
+            const notice = document.createElement('div');
+            notice.style.cssText = `
+              position: fixed;
+              bottom: 20px;
+              right: 20px;
+              background: var(--black);
+              color: white;
+              padding: 16px 20px;
+              border-radius: 12px;
+              font-size: 14px;
+              z-index: 10000;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              max-width: 300px;
+              cursor: pointer;
+            `;
+            notice.innerHTML = `
+              <strong>Update v0.1.10</strong><br>
+              Please re-import contacts for email support<br>
+              <span style="color: var(--blue); text-decoration: underline; margin-top: 8px; display: inline-block;">Install Now</span>
+            `;
+            notice.onclick = () => {
+              window.electronAPI.openExternal('https://remess.me');
+            };
+            document.body.appendChild(notice);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+              notice.style.transition = 'opacity 0.3s';
+              notice.style.opacity = '0';
+              setTimeout(() => notice.remove(), 300);
+            }, 5000);
+          }, 1000);
+        }
+      }
+
       if (importedContacts.length === 0) {
         const loadResult = await window.electronAPI.loadContacts();
         if (loadResult.success && loadResult.contacts.length > 0) {
           importedContacts = loadResult.contacts;
           localStorage.setItem('remess_contacts', JSON.stringify(importedContacts));
         }
-      } else {
       }
-      
+
       // Store contacts globally so they're ready
       window.remessContacts = importedContacts;
       
@@ -749,13 +889,13 @@ async function handleRefreshData() {
       
       // Refresh the dashboard display
       await loadDashboardData();
-      
+
       // Show success feedback
       refreshBtn.title = 'Refreshed!';
       setTimeout(() => {
         refreshBtn.title = 'Refresh data from iMessage';
       }, 2000);
-      
+
     } else {
       throw new Error('Failed to load stats');
     }
@@ -806,56 +946,96 @@ async function loadWrappedData() {
   // Use preloaded contacts
   const importedContacts = window.remessContacts || [];
   
+  // Helper function to match contact handle with imported contacts
+  function findContactMatch(handle, importedContacts) {
+    if (!handle || importedContacts.length === 0) return null;
+
+    // Check if it's an email
+    if (handle.includes('@')) {
+      // For emails, match exactly in phone field (since emails are stored there)
+      return importedContacts.find(c =>
+        c.phone && c.phone.toLowerCase() === handle.toLowerCase()
+      );
+    } else {
+      // For phone numbers, match by last 10 digits
+      const cleaned = handle.replace(/\D/g, '');
+      if (cleaned.length < 10) return null; // Invalid phone number
+
+      return importedContacts.find(c => {
+        // Skip email entries when matching phone numbers
+        if (c.phone.includes('@')) return false;
+
+        const contactCleaned = c.phone.replace(/\D/g, '');
+        if (contactCleaned.length < 10) return false;
+
+        return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+      });
+    }
+  }
+
   // Helper function to get display name and photo for a contact
   function getContactInfo(contact) {
     let displayName = contact.displayName || contact.name || contact.contact || 'Unknown';
     let contactPhoto = null;
-    
+
     // Try to match with imported contacts
-    if (importedContacts.length > 0 && contact.contact) {
-      let match = null;
-      
-      // Check if it's an email
-      if (contact.contact.includes('@')) {
-        // For emails, only match exact email addresses
-        match = importedContacts.find(c => 
-          c.phone && c.phone.toLowerCase() === contact.contact.toLowerCase()
-        );
-      } else {
-        // For phone numbers, match by last 10 digits
-        const cleaned = contact.contact.replace(/\D/g, '');
-        match = importedContacts.find(c => {
-          const contactCleaned = c.phone.replace(/\D/g, '');
-          return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
-        });
-      }
-      
-      if (match) {
-        displayName = match.name;
-        contactPhoto = match.photo || null;
-      }
+    const match = findContactMatch(contact.contact, importedContacts);
+
+    if (match) {
+      displayName = match.name;
+      contactPhoto = match.photo || null;
     }
-    
+
     return { displayName, contactPhoto };
   }
-  
+
+  // Consolidate contacts by display name to combine phone + email
+  const matchedContacts = topContacts.map(contact => {
+    const { displayName, contactPhoto } = getContactInfo(contact);
+    return {
+      ...contact,
+      displayName,
+      contactPhoto,
+      messageCount: contact.message_count || contact.messages || 0
+    };
+  });
+
+  const consolidatedMap = new Map();
+  matchedContacts.forEach(contact => {
+    const key = contact.displayName.toLowerCase();
+
+    if (consolidatedMap.has(key)) {
+      // Add to existing contact's message count
+      const existing = consolidatedMap.get(key);
+      existing.messageCount += contact.messageCount;
+    } else {
+      // First occurrence of this contact
+      consolidatedMap.set(key, contact);
+    }
+  });
+
+  // Convert back to array and sort by message count
+  const consolidatedContacts = Array.from(consolidatedMap.values())
+    .sort((a, b) => b.messageCount - a.messageCount);
+
   // Update wrapped stats
-  document.getElementById('wrappedTotalMessages').textContent = 
+  document.getElementById('wrappedTotalMessages').textContent =
     stats.totalMessages.toLocaleString();
-  document.getElementById('wrappedAvgMessages').textContent = 
+  document.getElementById('wrappedAvgMessages').textContent =
     (stats.avgMessagesPerDay || stats.avgPerDay).toLocaleString();
-  document.getElementById('wrappedTotalContacts').textContent = 
-    topContacts.length.toLocaleString();
-  document.getElementById('wrappedMostActiveYear').textContent = 
+  document.getElementById('wrappedTotalContacts').textContent =
+    consolidatedContacts.length.toLocaleString();
+  document.getElementById('wrappedMostActiveYear').textContent =
     stats.mostActiveYear;
-  document.getElementById('wrappedYearCount').textContent = 
+  document.getElementById('wrappedYearCount').textContent =
     stats.mostActiveYearCount.toLocaleString();
-  
-  // Top contact
-  const topContact = topContacts[0];
-  const { displayName, contactPhoto } = getContactInfo(topContact);
+
+  // Top contact (after consolidation)
+  const topContact = consolidatedContacts[0];
+  const displayName = topContact.displayName;
+  const contactPhoto = topContact.contactPhoto;
   const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2);
-  
+
   // Display avatar - use photo if available, otherwise initials
   const avatarContainer = document.getElementById('wrappedTopAvatar');
   if (contactPhoto) {
@@ -863,10 +1043,10 @@ async function loadWrappedData() {
   } else {
     document.getElementById('wrappedTopInitial').textContent = initials || '??';
   }
-  
+
   document.getElementById('wrappedTopName').textContent = displayName;
-  document.getElementById('wrappedTopCount').textContent = 
-    (topContact.message_count || topContact.messages || 0).toLocaleString();
+  document.getElementById('wrappedTopCount').textContent =
+    topContact.messageCount.toLocaleString();
 }
 
 // Navigate slides
@@ -982,18 +1162,18 @@ async function loadDashboardData() {
     `${stats.mostActiveYearCount.toLocaleString()} texts`;
   
   // Create charts with real data
-  setTimeout(() => {
+  setTimeout(async () => {
     createMessagesOverTimeChart(messagesByYear);
-    
+
     // Check if we need to apply a year filter
     if (currentDashboardYear) {
       // Apply the year filter that was previously selected
-      handleTopContactsYearChange(currentDashboardYear);
+      await handleTopContactsYearChange(currentDashboardYear);
     } else {
       // Show all contacts
-      renderTopContacts(topContacts);
+      await renderTopContacts(topContacts);
     }
-    
+
     // Load dashboard word cloud
     loadDashboardWords();
   }, 500);
@@ -1208,36 +1388,46 @@ async function renderTopContacts(topContactsData) {
   }
   
   
+  // Helper function to match contact handle with imported contacts
+  function findContactMatch(handle, importedContacts) {
+    if (!handle || importedContacts.length === 0) return null;
+
+    // Check if it's an email
+    if (handle.includes('@')) {
+      // For emails, match exactly in phone field (since emails are stored there)
+      return importedContacts.find(c =>
+        c.phone && c.phone.toLowerCase() === handle.toLowerCase()
+      );
+    } else {
+      // For phone numbers, match by last 10 digits
+      const cleaned = handle.replace(/\D/g, '');
+      if (cleaned.length < 10) return null; // Invalid phone number
+
+      return importedContacts.find(c => {
+        // Skip email entries when matching phone numbers
+        if (c.phone.includes('@')) return false;
+
+        const contactCleaned = c.phone.replace(/\D/g, '');
+        if (contactCleaned.length < 10) return false;
+
+        return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+      });
+    }
+  }
+
   // First pass: match contacts to names
   const matchedContacts = contacts.map((contact, index) => {
     let displayName = contact.displayName || contact.name || `Contact #${index + 1}`;
     let contactPhoto = null;
-    
+
     // Try to match with imported contacts
-    if (importedContacts.length > 0 && contact.contact) {
-      let match = null;
-      
-      // Check if it's an email
-      if (contact.contact.includes('@')) {
-        // For emails, only match exact email addresses
-        match = importedContacts.find(c => 
-          c.phone && c.phone.toLowerCase() === contact.contact.toLowerCase()
-        );
-      } else {
-        // For phone numbers, match by last 10 digits
-        const cleaned = contact.contact.replace(/\D/g, '');
-        match = importedContacts.find(c => {
-          const contactCleaned = c.phone.replace(/\D/g, '');
-          return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
-        });
-      }
-      
-      if (match) {
-        displayName = match.name;
-        contactPhoto = match.photo || null;
-      }
+    const match = findContactMatch(contact.contact, importedContacts);
+
+    if (match) {
+      displayName = match.name;
+      contactPhoto = match.photo || null;
     }
-    
+
     return {
       ...contact,
       displayName,
@@ -1282,21 +1472,33 @@ async function renderTopContacts(topContactsData) {
   
   // Show contacts up to current count
   const contactsToShow = allConsolidatedContacts.slice(0, window.currentContactsShown);
-  
+
+  // Track image loading promises
+  const imageLoadPromises = [];
+
   // Now render the contacts
   contactsToShow.forEach((contact, index) => {
     const displayName = contact.displayName;
     const contactPhoto = contact.contactPhoto;
     const messageCount = contact.messageCount;
-    
+
     const contactElement = document.createElement('div');
     contactElement.className = 'contact-item';
-    
+
     // Generate profile picture HTML
+    const initials = getInitials(displayName);
     let avatarHTML = '';
+    let imagePromise = null;
+
     if (contactPhoto) {
-      // Use imported contact photo with error handling - show initials if image fails
-      const initials = getInitials(displayName);
+      // Preload image before rendering
+      imagePromise = new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // Resolve even on error so we don't block
+        img.src = contactPhoto;
+      });
+      imageLoadPromises.push(imagePromise);
       avatarHTML = `<img src="${contactPhoto}" alt="${displayName}" class="contact-avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder\\'>${initials}</div>';">`;
     } else if (contact.imageData) {
       // Convert Buffer to base64 data URL
@@ -1304,16 +1506,25 @@ async function renderTopContacts(topContactsData) {
         const base64 = btoa(
           new Uint8Array(contact.imageData).reduce((data, byte) => data + String.fromCharCode(byte), '')
         );
-        avatarHTML = `<img src="data:image/jpeg;base64,${base64}" alt="${displayName}" class="contact-avatar">`;
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        // Preload image before rendering
+        imagePromise = new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = dataUrl;
+        });
+        imageLoadPromises.push(imagePromise);
+        avatarHTML = `<img src="${dataUrl}" alt="${displayName}" class="contact-avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder\\'>${initials}</div>';">`;
       } catch (e) {
         // If conversion fails, use initials
-        avatarHTML = `<div class="contact-avatar-placeholder">${getInitials(displayName)}</div>`;
+        avatarHTML = `<div class="contact-avatar-placeholder">${initials}</div>`;
       }
     } else {
       // Use initials as fallback
-      avatarHTML = `<div class="contact-avatar-placeholder">${getInitials(displayName)}</div>`;
+      avatarHTML = `<div class="contact-avatar-placeholder">${initials}</div>`;
     }
-    
+
     contactElement.innerHTML = `
       <div class="contact-left">
         <div class="contact-rank">${index + 1}</div>
@@ -1325,7 +1536,7 @@ async function renderTopContacts(topContactsData) {
       </div>
       <div class="contact-count">${messageCount.toLocaleString()}</div>
     `;
-    
+
     // Add click handler to show contact detail
     contactElement.addEventListener('click', () => {
       showContactDetail({
@@ -1335,19 +1546,22 @@ async function renderTopContacts(topContactsData) {
         messages: messageCount
       });
     });
-    
+
     // Stagger animation
     contactElement.style.opacity = '0';
     contactElement.style.transform = 'translateX(-20px)';
-    
+
     setTimeout(() => {
       contactElement.style.transition = 'all 0.4s ease';
       contactElement.style.opacity = '1';
       contactElement.style.transform = 'translateX(0)';
     }, index * 100);
-    
+
     container.appendChild(contactElement);
   });
+
+  // Wait for all images to load before returning
+  await Promise.all(imageLoadPromises);
   
   // Show or hide "Load More" button
   const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
@@ -1460,20 +1674,20 @@ function loadMoreContacts() {
     
     // Generate profile picture HTML
     let avatarHTML = '';
+    const initials = getInitials(displayName);
     if (contactPhoto) {
-      const initials = getInitials(displayName);
       avatarHTML = `<img src="${contactPhoto}" alt="${displayName}" class="contact-avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder\\'>${initials}</div>';">`;
     } else if (contact.imageData) {
       try {
         const base64 = btoa(
           new Uint8Array(contact.imageData).reduce((data, byte) => data + String.fromCharCode(byte), '')
         );
-        avatarHTML = `<img src="data:image/jpeg;base64,${base64}" alt="${displayName}" class="contact-avatar">`;
+        avatarHTML = `<img src="data:image/jpeg;base64,${base64}" alt="${displayName}" class="contact-avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder\\'>${initials}</div>';">`;
       } catch (e) {
-        avatarHTML = `<div class="contact-avatar-placeholder">${getInitials(displayName)}</div>`;
+        avatarHTML = `<div class="contact-avatar-placeholder">${initials}</div>`;
       }
     } else {
-      avatarHTML = `<div class="contact-avatar-placeholder">${getInitials(displayName)}</div>`;
+      avatarHTML = `<div class="contact-avatar-placeholder">${initials}</div>`;
     }
     
     contactElement.innerHTML = `
@@ -1570,45 +1784,75 @@ function formatPhoneNumber(phone) {
 
 // Handle chat type change (DMs vs Groups)
 async function handleChatTypeChange(chatType) {
+  // Show loading indicator
+  const container = document.getElementById('topContactsList');
+  const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
+
+  // Create loading overlay
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+  `;
+  loadingOverlay.innerHTML = `
+    <img src="icon.png" alt="Loading" style="width: 60px; height: 60px; animation: bounce 2s ease-in-out infinite;">
+  `;
+
+  // Fade out current content
+  container.style.opacity = '0.3';
+  container.style.transition = 'opacity 0.2s ease';
+  container.style.position = 'relative';
+  container.appendChild(loadingOverlay);
+  loadMoreBtn.style.display = 'none';
+
   // Update title and subtitle
   const title = document.getElementById('topPeopleTitle');
   const subtitle = document.getElementById('topPeopleSubtitle');
   const yearSelector = document.getElementById('topContactsYearSelector');
-  
-  if (chatType === 'groups') {
-    title.textContent = 'Your Top Group Chats';
-    subtitle.textContent = 'The groups you text in most';
-    
-    // Get current year filter
-    const year = yearSelector.value;
-    
-    // Load group chats
-    try {
+
+  try {
+    if (chatType === 'groups') {
+      title.textContent = 'Your Top Group Chats';
+      subtitle.textContent = 'The groups you text in most';
+
+      // Get current year filter
+      const year = yearSelector.value;
+
+      // Load group chats
       let result;
       if (year) {
         result = await window.electronAPI.getTopGroupChatsByYear(year);
       } else {
         result = await window.electronAPI.getTopGroupChats();
       }
-      
+
       if (result.success) {
         await renderGroupChats(result.groupChats);
       }
-    } catch (error) {
-      console.error('Error loading group chats:', error);
-    }
-  } else {
-    // DMs
-    title.textContent = 'Your Top People';
-    subtitle.textContent = 'Who you text the most';
-    
-    // Reload contacts
-    const year = yearSelector.value;
-    if (year) {
-      await handleTopContactsYearChange(year);
     } else {
-      renderTopContacts(userData.topContacts);
+      // DMs
+      title.textContent = 'Your Top People';
+      subtitle.textContent = 'Who you text the most';
+
+      // Reload contacts
+      const year = yearSelector.value;
+      if (year) {
+        await handleTopContactsYearChange(year);
+      } else {
+        await renderTopContacts(userData.topContacts);
+      }
     }
+  } catch (error) {
+    console.error('Error changing chat type:', error);
+  } finally {
+    // Remove loading overlay and restore opacity
+    if (loadingOverlay.parentElement) {
+      loadingOverlay.remove();
+    }
+    container.style.opacity = '1';
   }
 }
 
@@ -1651,22 +1895,37 @@ async function renderGroupChats(groupChatsData) {
       // If no display name, build one from participant handles
       const participantNames = [];
       
-      // Try to match each handle to a contact
-      for (const handle of groupChat.participantHandles.slice(0, 3)) {
-        let match = null;
-        
+      // Helper function to match contact handle with imported contacts
+      function findContactMatch(handle, importedContacts) {
+        if (!handle || importedContacts.length === 0) return null;
+
+        // Check if it's an email
         if (handle.includes('@')) {
-          match = importedContacts.find(c => 
+          // For emails, match exactly in phone field (since emails are stored there)
+          return importedContacts.find(c =>
             c.phone && c.phone.toLowerCase() === handle.toLowerCase()
           );
         } else {
+          // For phone numbers, match by last 10 digits
           const cleaned = handle.replace(/\D/g, '');
-          match = importedContacts.find(c => {
+          if (cleaned.length < 10) return null; // Invalid phone number
+
+          return importedContacts.find(c => {
+            // Skip email entries when matching phone numbers
+            if (c.phone.includes('@')) return false;
+
             const contactCleaned = c.phone.replace(/\D/g, '');
+            if (contactCleaned.length < 10) return false;
+
             return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
           });
         }
-        
+      }
+
+      // Try to match each handle to a contact
+      for (const handle of groupChat.participantHandles.slice(0, 3)) {
+        const match = findContactMatch(handle, importedContacts);
+
         if (match) {
           participantNames.push(match.name.split(' ')[0]); // First name only
         } else {
@@ -1917,31 +2176,44 @@ async function loadGroupChatParticipants(year = null) {
         }
       }
       
+      // Helper function to match contact handle with imported contacts
+      function findContactMatch(handle, importedContacts) {
+        if (!handle || importedContacts.length === 0) return null;
+
+        // Check if it's an email
+        if (handle.includes('@')) {
+          // For emails, match exactly in phone field (since emails are stored there)
+          return importedContacts.find(c =>
+            c.phone && c.phone.toLowerCase() === handle.toLowerCase()
+          );
+        } else {
+          // For phone numbers, match by last 10 digits
+          const cleaned = handle.replace(/\D/g, '');
+          if (cleaned.length < 10) return null; // Invalid phone number
+
+          return importedContacts.find(c => {
+            // Skip email entries when matching phone numbers
+            if (c.phone.includes('@')) return false;
+
+            const contactCleaned = c.phone.replace(/\D/g, '');
+            if (contactCleaned.length < 10) return false;
+
+            return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
+          });
+        }
+      }
+
       // Enhance participants with contact info
       const enhancedParticipants = participantsResult.participants.map(participant => {
         let displayName = participant.contact;
         let contactPhoto = null;
-        
+
         // Try to match with imported contacts
-        if (importedContacts.length > 0) {
-          let match = null;
-          
-          if (participant.contact.includes('@')) {
-            match = importedContacts.find(c => 
-              c.phone && c.phone.toLowerCase() === participant.contact.toLowerCase()
-            );
-          } else {
-            const cleaned = participant.contact.replace(/\D/g, '');
-            match = importedContacts.find(c => {
-              const contactCleaned = c.phone.replace(/\D/g, '');
-              return contactCleaned.endsWith(cleaned.slice(-10)) || cleaned.endsWith(contactCleaned.slice(-10));
-            });
-          }
-          
-          if (match) {
-            displayName = match.name;
-            contactPhoto = match.photo || null;
-          }
+        const match = findContactMatch(participant.contact, importedContacts);
+
+        if (match) {
+          displayName = match.name;
+          contactPhoto = match.photo || null;
         }
         
         // Format phone number if no name match
@@ -1992,7 +2264,10 @@ async function loadGroupChatParticipants(year = null) {
       
       // Display participants list
       renderGroupChatParticipants(enhancedParticipants);
-      
+
+      // Store participants globally for message search
+      window.groupChatParticipants = enhancedParticipants;
+
       // Show participants section
       document.getElementById('groupChatParticipantsSection').style.display = 'block';
     }
@@ -2144,6 +2419,13 @@ async function handleGroupChatMessageSearch() {
       // Clear and populate examples
       examplesContainer.innerHTML = '';
       result.examples.forEach(example => {
+        // Map sender ID to participant name for group chats
+        if (example.senderId && window.groupChatParticipants) {
+          const participant = window.groupChatParticipants.find(p => p.handleId === example.senderId);
+          if (participant) {
+            example.senderName = participant.displayName;
+          }
+        }
         const messageEl = createMessageElement(example, searchTerm);
         examplesContainer.appendChild(messageEl);
       });
@@ -2255,15 +2537,20 @@ async function handleTopContactsYearChange(year) {
 
 // Handle year change for contact detail view
 async function handleContactDetailYearChange(year) {
+  // Add loading animation
+  const detailContainer = document.getElementById('contactDetailContainer');
+  detailContainer.style.opacity = '0.5';
+  detailContainer.style.transition = 'opacity 0.2s ease';
+
   // Check if we're viewing a group chat or a contact
   if (window.currentGroupChatId) {
     // Handle group chat year change - reload ALL stats with year filter
     try {
       const result = await window.electronAPI.getGroupChatStats(window.currentGroupChatId, year);
-      
+
       if (result.success && result.stats) {
         const stats = result.stats;
-        
+
         // Update ALL stats with year-filtered data
         document.getElementById('detailTotalMessages').textContent = stats.totalMessages.toLocaleString();
         document.getElementById('detailSentMessages').textContent = stats.sentMessages.toLocaleString();
@@ -2314,24 +2601,30 @@ async function handleContactDetailYearChange(year) {
       }
     } catch (error) {
       console.error('Error changing group chat year:', error);
+    } finally {
+      // Restore opacity with animation
+      detailContainer.style.opacity = '1';
     }
   } else if (currentContactHandle) {
     // Handle contact year change
     try {
       const result = await window.electronAPI.getContactStats(currentContactHandle, year || null);
-      
+
       if (result.success && result.stats) {
         // Get contact info from current view
         const displayName = document.getElementById('detailContactName').textContent;
         loadContactDetailStats(result.stats, result.words, result.emojis, displayName);
-        
-        // Load reactions
-        await loadContactReactions(currentContactHandle, displayName);
+
+        // Load reactions with year filter
+        await loadContactReactions(currentContactHandle, displayName, year);
       } else {
         console.error('Failed to load contact stats:', result.error);
       }
     } catch (error) {
       console.error('Error changing contact detail year:', error);
+    } finally {
+      // Restore opacity with animation
+      detailContainer.style.opacity = '1';
     }
   }
 }
@@ -2342,21 +2635,73 @@ async function handleContactDetailYearChange(year) {
 
 // Show contact detail view
 async function showContactDetail(contact) {
-  
+
   // Store current contact handles (can be multiple for consolidated contacts) and clear group chat ID
   currentContactHandle = contact.handles || [contact.handle];
   window.currentGroupChatId = null;
-  
-  // Hide dashboard, show detail
-  dashboardContainer.style.display = 'none';
-  contactDetailContainer.style.display = 'block';
-  
+
+  // Show loading overlay with icon while keeping dashboard visible
+  let loadingOverlay = document.getElementById('contactLoadingOverlay');
+  if (!loadingOverlay) {
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'contactLoadingOverlay';
+    loadingOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    `;
+    loadingOverlay.innerHTML = `
+      <div style="text-align: center;">
+        <img src="icon.png" alt="Loading" style="width: 80px; height: 80px; animation: bounce 2s ease-in-out infinite;">
+      </div>
+    `;
+    document.body.appendChild(loadingOverlay);
+  } else {
+    loadingOverlay.style.display = 'flex';
+  }
+
+  // Load contact stats FIRST before rendering anything
+  try {
+    let result;
+    if (Array.isArray(currentContactHandle) && currentContactHandle.length > 1) {
+      // Multiple handles - get combined stats
+      result = await window.electronAPI.getContactStats(currentContactHandle);
+    } else {
+      // Single handle
+      const singleHandle = Array.isArray(currentContactHandle) ? currentContactHandle[0] : currentContactHandle;
+      result = await window.electronAPI.getContactStats(singleHandle);
+    }
+
+    if (!result.success || !result.stats) {
+      console.error('Failed to load contact stats:', result.error);
+      loadingOverlay.style.display = 'none';
+      return;
+    }
+
+    // NOW switch views and render the page
+    dashboardContainer.style.display = 'none';
+    contactDetailContainer.style.display = 'block';
+
   // Restore button filters for DM (hide dropdowns)
   document.getElementById('wordFilterGroup').style.display = 'inline-flex';
   document.getElementById('wordFilterDropdown').style.display = 'none';
   document.getElementById('messageFilterGroup').style.display = 'inline-flex';
   document.getElementById('messageFilterDropdown').style.display = 'none';
-  
+
+  // Update filter button labels to use contact's first name instead of "Them"
+  const firstName = (contact.displayName || (Array.isArray(contact.handles) ? contact.handles[0] : contact.handle)).split(' ')[0];
+  const wordFilterButtons = document.querySelectorAll('#wordFilterGroup .filter-btn[data-filter="them"]');
+  const messageFilterButtons = document.querySelectorAll('#messageFilterGroup .filter-btn[data-filter="them"]');
+  wordFilterButtons.forEach(btn => btn.textContent = firstName);
+  messageFilterButtons.forEach(btn => btn.textContent = firstName);
+
   // Hide participants section (only for group chats)
   document.getElementById('groupChatParticipantsSection').style.display = 'none';
   
@@ -2400,59 +2745,62 @@ async function showContactDetail(contact) {
   const displayName = contact.displayName || (Array.isArray(contact.handles) ? contact.handles[0] : contact.handle);
   detailContactName.textContent = displayName;
   
-  // Format phone number(s) nicely - show count if multiple
+  // Format phone number(s) and email(s) nicely - show all handles
   const handles = currentContactHandle;
-  let formattedHandle;
-  if (Array.isArray(handles) && handles.length > 1) {
-    formattedHandle = `${formatPhoneNumber(handles[0])} (+${handles.length - 1} more)`;
+  let formattedHandles = [];
+
+  if (Array.isArray(handles)) {
+    handles.forEach(handle => {
+      if (handle.includes('@')) {
+        formattedHandles.push(handle); // Email - show as is
+      } else {
+        formattedHandles.push(formatPhoneNumber(handle)); // Phone - format nicely
+      }
+    });
   } else {
-    formattedHandle = formatPhoneNumber(Array.isArray(handles) ? handles[0] : handles);
+    if (handles.includes('@')) {
+      formattedHandles.push(handles);
+    } else {
+      formattedHandles.push(formatPhoneNumber(handles));
+    }
   }
-  detailContactHandle.textContent = formattedHandle;
+
+  detailContactHandle.textContent = formattedHandles.join(' • ');
   
-  // Clear avatar container and reset
-  avatarContainer.innerHTML = '';
-  
-  // Set avatar
-  if (contact.imageData) {
-    // Create new img element
-    const img = document.createElement('img');
-    img.id = 'detailContactAvatar';
-    img.className = 'detail-contact-avatar';
-    img.alt = displayName;
-    img.src = contact.imageData;
-    img.onerror = () => {
-      // Replace with initials on error
+    // Clear avatar container and reset
+    avatarContainer.innerHTML = '';
+
+    // Set avatar
+    if (contact.imageData) {
+      // Create new img element
+      const img = document.createElement('img');
+      img.id = 'detailContactAvatar';
+      img.className = 'detail-contact-avatar';
+      img.alt = displayName;
+      img.src = contact.imageData;
+      img.onerror = () => {
+        // Replace with initials on error
+        avatarContainer.innerHTML = `<div class="detail-contact-avatar" style="display: flex; align-items: center; justify-content: center; background: var(--black); color: white; font-size: 48px; font-weight: 700;">${getInitials(displayName)}</div>`;
+      };
+      avatarContainer.appendChild(img);
+    } else {
+      // Use initials as fallback
       avatarContainer.innerHTML = `<div class="detail-contact-avatar" style="display: flex; align-items: center; justify-content: center; background: var(--black); color: white; font-size: 48px; font-weight: 700;">${getInitials(displayName)}</div>`;
-    };
-    avatarContainer.appendChild(img);
-  } else {
-    // Use initials as fallback
-    avatarContainer.innerHTML = `<div class="detail-contact-avatar" style="display: flex; align-items: center; justify-content: center; background: var(--black); color: white; font-size: 48px; font-weight: 700;">${getInitials(displayName)}</div>`;
-  }
-  
-  // Load contact stats - if multiple handles, query them all
-  try {
-    let result;
-    if (Array.isArray(currentContactHandle) && currentContactHandle.length > 1) {
-      // Multiple handles - get combined stats
-      result = await window.electronAPI.getContactStats(currentContactHandle);
-    } else {
-      // Single handle
-      const singleHandle = Array.isArray(currentContactHandle) ? currentContactHandle[0] : currentContactHandle;
-      result = await window.electronAPI.getContactStats(singleHandle);
     }
-    
-    if (result.success && result.stats) {
-      loadContactDetailStats(result.stats, result.words, result.emojis, displayName);
-      
-      // Load reactions
-      await loadContactReactions(currentContactHandle, displayName);
-    } else {
-      console.error('Failed to load contact stats:', result.error);
-    }
+
+    // Load and display the stats
+    loadContactDetailStats(result.stats, result.words, result.emojis, displayName);
+
+    // Load reactions
+    await loadContactReactions(currentContactHandle, displayName);
+
+    // Hide loading overlay
+    loadingOverlay.style.display = 'none';
+
   } catch (error) {
     console.error('Error loading contact details:', error);
+    // Hide loading overlay on error
+    loadingOverlay.style.display = 'none';
   }
 }
 
@@ -2519,11 +2867,11 @@ function loadContactDetailStats(stats, words, emojis, contactName) {
 }
 
 // Load and display reaction stats for contact
-async function loadContactReactions(contactHandle, contactName) {
+async function loadContactReactions(contactHandle, contactName, year = null) {
   try {
     // Get first handle if it's an array
     const singleHandle = Array.isArray(contactHandle) ? contactHandle[0] : contactHandle;
-    const result = await window.electronAPI.getContactReactions(singleHandle);
+    const result = await window.electronAPI.getContactReactions(singleHandle, year);
     
     if (result.success) {
       const yourReactionsContainer = document.getElementById('yourReactions');
@@ -2743,12 +3091,15 @@ async function handleMessageSearch() {
         searchExamples.innerHTML = '<div class="search-no-results">No messages found containing "' + searchTerm + '"</div>';
         loadMoreBtn.style.display = 'none';
       } else {
+        // Get contact name from page header
+        const contactName = document.getElementById('detailContactName')?.textContent || null;
+
         // Display example messages
         result.examples.forEach(msg => {
-          const messageEl = createMessageElement(msg, searchTerm);
+          const messageEl = createMessageElement(msg, searchTerm, contactName);
           searchExamples.appendChild(messageEl);
         });
-        
+
         // Update offset and show/hide load more button
         currentSearchOffset += result.examples.length;
         if (currentSearchOffset < totalSearchResults) {
@@ -2769,25 +3120,68 @@ async function handleMessageSearch() {
 async function handleLoadMoreMessages() {
   const searchExamples = document.getElementById('searchExamples');
   const loadMoreBtn = document.getElementById('loadMoreMessagesBtn');
-  
+
+  // Check if we're in a group chat
+  if (window.currentGroupChatId) {
+    // Handle group chat load more
+    const personSelector = document.getElementById('messagePersonSelector');
+    const personId = personSelector.value;
+
+    try {
+      const result = await window.electronAPI.searchGroupChatMessages(
+        window.currentGroupChatId,
+        window.currentSearchTerm,
+        SEARCH_PAGE_SIZE,
+        window.currentSearchOffset,
+        personId
+      );
+
+      if (result.success && result.examples.length > 0) {
+        result.examples.forEach(example => {
+          // Map sender ID to participant name for group chats
+          if (example.senderId && window.groupChatParticipants) {
+            const participant = window.groupChatParticipants.find(p => p.handleId === example.senderId);
+            if (participant) {
+              example.senderName = participant.displayName;
+            }
+          }
+          const messageEl = createMessageElement(example, window.currentSearchTerm);
+          searchExamples.appendChild(messageEl);
+        });
+
+        window.currentSearchOffset += result.examples.length;
+        if (window.currentSearchOffset >= result.count) {
+          loadMoreBtn.style.display = 'none';
+        }
+      }
+    } catch (error) {
+      console.error('Error loading more group chat messages:', error);
+    }
+    return;
+  }
+
+  // Handle DM load more
   if (!currentContactHandle || !currentSearchTerm) {
     return;
   }
-  
+
   // Get selected filter from active button
   const activeFilterBtn = document.querySelector('.filter-btn[data-filter-type="message"].active');
   const filter = activeFilterBtn ? activeFilterBtn.dataset.filter : 'both';
-  
+
   try {
     const result = await window.electronAPI.searchContactMessages(currentContactHandle, currentSearchTerm, SEARCH_PAGE_SIZE, currentSearchOffset, filter);
-    
+
     if (result.success && result.examples.length > 0) {
+      // Get contact name from page header
+      const contactName = document.getElementById('detailContactName')?.textContent || null;
+
       // Append new messages
       result.examples.forEach(msg => {
-        const messageEl = createMessageElement(msg, currentSearchTerm);
+        const messageEl = createMessageElement(msg, currentSearchTerm, contactName);
         searchExamples.appendChild(messageEl);
       });
-      
+
       // Update offset and show/hide load more button
       currentSearchOffset += result.examples.length;
       if (currentSearchOffset >= totalSearchResults) {
@@ -2800,26 +3194,41 @@ async function handleLoadMoreMessages() {
 }
 
 // Helper to create a message element
-function createMessageElement(msg, searchTerm) {
+function createMessageElement(msg, searchTerm, contactName = null) {
   const messageEl = document.createElement('div');
   messageEl.className = 'message-example';
-  
+
   // Highlight the search term in the message text
   const highlightedText = msg.text.replace(
     new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi'),
     '<span class="highlight">$1</span>'
   );
-  
+
+  // Determine sender name
+  let senderName;
+  if (msg.isFromMe) {
+    senderName = 'You';
+  } else if (msg.senderName) {
+    // For group chats with specific sender
+    senderName = msg.senderName;
+  } else if (contactName) {
+    // For DMs, use the contact name
+    senderName = contactName;
+  } else {
+    // Fallback
+    senderName = 'Them';
+  }
+
   messageEl.innerHTML = `
     <div class="message-header">
       <span class="message-sender ${msg.isFromMe ? 'from-me' : 'from-them'}">
-        ${msg.isFromMe ? 'You' : 'Them'}
+        ${senderName}
       </span>
       <span class="message-date">${msg.formattedDate}</span>
     </div>
     <div class="message-text">${highlightedText}</div>
   `;
-  
+
   return messageEl;
 }
 

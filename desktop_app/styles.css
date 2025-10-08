@@ -1757,6 +1757,13 @@ body {
   background: var(--off-white);
   border: 2px solid var(--black);
   transition: all 0.2s ease;
+  /* Ensure images don't break layout */
+  flex-shrink: 0;
+  display: block;
+  min-width: 4.5vmin;
+  min-height: 4.5vmin;
+  max-width: 4.5vmin;
+  max-height: 4.5vmin;
 }
 
 .contact-avatar-placeholder {

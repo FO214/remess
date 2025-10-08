@@ -398,9 +398,9 @@ ipcMain.handle('get-contact-words-filtered', async (event, contactHandle, filter
 });
 
 // Get contact reactions
-ipcMain.handle('get-contact-reactions', async (event, contactHandle) => {
+ipcMain.handle('get-contact-reactions', async (event, contactHandle, year) => {
   try {
-    const reactions = dbHandler.getContactReactions(contactHandle);
+    const reactions = dbHandler.getContactReactions(contactHandle, year);
     return { success: true, ...reactions };
   } catch (error) {
     console.error('Error getting contact reactions:', error);
