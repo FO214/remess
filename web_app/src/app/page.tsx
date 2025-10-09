@@ -40,60 +40,6 @@ function HomeContent() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  useEffect(() => {
-    let isScrolling = false;
-    
-    const smoothScrollTo = (targetY: number, duration: number) => {
-      const start = window.scrollY;
-      const startTime = performance.now();
-      
-      const animateScroll = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const easeInOutCubic = progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-        
-        window.scrollTo(0, start + (targetY - start) * easeInOutCubic);
-        
-        if (progress < 1) {
-          requestAnimationFrame(animateScroll);
-        } else {
-          isScrolling = false;
-        }
-      };
-      
-      requestAnimationFrame(animateScroll);
-    };
-    
-    const handleWheel = (e: WheelEvent) => {
-      if (isScrolling) return;
-      
-      const currentScroll = window.scrollY;
-      const heroHeight = window.innerHeight - 30;
-      
-      // Scrolling down - go to setup
-      if (e.deltaY > 0 && currentScroll < 100) {
-        e.preventDefault();
-        isScrolling = true;
-        smoothScrollTo(heroHeight, 800);
-      }
-      // Scrolling up - go to hero
-      else if (e.deltaY < 0 && currentScroll > 100) {
-        e.preventDefault();
-        isScrolling = true;
-        smoothScrollTo(0, 800);
-      }
-    };
-    
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    
-    return () => {
-      window.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
-
   return (
     <div className="landing-container">
       {/* Floating Messages Background */}
