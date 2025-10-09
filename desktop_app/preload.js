@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Contacts operations
   saveContacts: (contacts) => ipcRenderer.invoke('save-contacts', contacts),
   loadContacts: () => ipcRenderer.invoke('load-contacts'),
+  deleteContacts: () => ipcRenderer.invoke('delete-contacts'),
   getContactStats: (contactHandle, year) => ipcRenderer.invoke('get-contact-stats', contactHandle, year),
   getAvailableYears: () => ipcRenderer.invoke('get-available-years'),
   getTopContactsByYear: (year) => ipcRenderer.invoke('get-top-contacts-by-year', year),

@@ -62,6 +62,8 @@ let userData = null;
 let charts = {};
 let availableYears = [];
 let currentContactHandle = null;
+let allTopContacts = []; // Store all contacts for search
+let currentContactsView = 'dms'; // Track if showing DMs or groups
 
 // DOM Elements
 const landingContainer = document.getElementById('landingContainer');
@@ -130,7 +132,7 @@ const totalSlides = 7;
 async function init() {
   try {
     setupEventListeners();
-    checkAuthStatus();
+    await checkAuthStatus();
     initShareStats();
 
     // Set version tag
@@ -146,7 +148,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.12';
+          versionTag.textContent = 'v0.1.13';
         }
       }
     }
@@ -230,11 +232,19 @@ function setupEventListeners() {
   // Refresh data button
   const refreshDataBtn = document.getElementById('refreshDataBtn');
   refreshDataBtn.addEventListener('click', handleRefreshData);
-  
+
+  // Re-upload CSV button
+  const reuploadCsvBtn = document.getElementById('reuploadCsvBtn');
+  reuploadCsvBtn.addEventListener('click', handleReuploadCsv);
+
   // Load more contacts button
   const loadMoreContactsBtn = document.getElementById('loadMoreContactsBtn');
   loadMoreContactsBtn.addEventListener('click', loadMoreContacts);
-  
+
+  // Top contacts search
+  const topContactsSearchInput = document.getElementById('topContactsSearchInput');
+  topContactsSearchInput.addEventListener('input', handleTopContactsSearch);
+
   // Permissions buttons
   openSettingsBtn.addEventListener('click', handleOpenSettings);
   checkAccessBtn.addEventListener('click', handleCheckAccess);
@@ -387,23 +397,30 @@ function showLandingScreen() {
 }
 
 // Check authentication status
-function checkAuthStatus() {
+async function checkAuthStatus() {
   // Check if user was previously authenticated (using localStorage)
   const savedUser = localStorage.getItem('remess_user');
   const savedTokens = localStorage.getItem('remess_auth_tokens');
-  
+
   if (savedUser && savedTokens) {
     try {
       userData = JSON.parse(savedUser);
       const tokens = JSON.parse(savedTokens);
-      
-      // Check if tokens are still valid (30 days = 2592000000 ms)
+
+      // Check if tokens are still valid (7 days = 604800000 ms)
       const tokenAge = Date.now() - (tokens.timestamp || 0);
-      const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
-      
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+
       if (tokenAge < maxAge) {
         // Tokens are still valid, user is authenticated
         isAuthenticated = true;
+
+        // Skip landing page and go directly to loading/dashboard
+        landingContainer.style.display = 'none';
+        authContainer.style.display = 'none';
+        loadingContainer.style.display = 'flex';
+        await checkAndLoadData();
+        return;
       } else {
         // Tokens expired, clear them
         localStorage.removeItem('remess_user');
@@ -420,8 +437,8 @@ function checkAuthStatus() {
       userData = null;
     }
   }
-  
-  // Always show landing page on app start
+
+  // Show landing page if not authenticated
   landingContainer.style.display = 'flex';
 }
 
@@ -722,12 +739,12 @@ async function loadRealData() {
               cursor: pointer;
             `;
             notice.innerHTML = `
-              <strong>Update v0.1.12</strong><br>
+              <strong>Update v0.1.13</strong><br>
               New features and improvements available<br>
               <span style="color: var(--blue); text-decoration: underline; margin-top: 8px; display: inline-block;">Install Now</span>
             `;
             notice.onclick = () => {
-              window.electronAPI.openExternal('https://remess.me');
+              window.electronAPI.openExternal('https://remess.me/?update');
             };
             document.body.appendChild(notice);
 
@@ -909,6 +926,27 @@ async function handleRefreshData() {
     refreshBtn.classList.remove('refreshing');
     refreshBtn.disabled = false;
   }
+}
+
+// Handle re-upload CSV
+async function handleReuploadCsv() {
+  // Confirm with user
+  const confirmed = confirm('This will clear your current contacts CSV and let you upload a new one. Continue?');
+
+  if (!confirmed) return;
+
+  // Clear contacts from localStorage
+  localStorage.removeItem('remess_contacts');
+
+  // Delete the CSV file from app data
+  try {
+    await window.electronAPI.deleteContacts();
+  } catch (error) {
+    console.error('Error deleting contacts file:', error);
+  }
+
+  // Navigate to import screen
+  showImportScreen();
 }
 
 // Show wrapped experience
@@ -1728,12 +1766,113 @@ function loadMoreContacts() {
   
   // Update count
   window.currentContactsShown = newCount;
-  
+
   // Update or hide button
   if (newCount < window.allTopContacts.length) {
     loadMoreBtn.querySelector('span').textContent = 'Load More';
   } else {
     loadMoreBtn.style.display = 'none';
+  }
+}
+
+// Handle search for top contacts
+function handleTopContactsSearch(event) {
+  const searchTerm = event.target.value.toLowerCase().trim();
+  const container = document.getElementById('topContactsList');
+
+  // Check if we're viewing DMs or groups
+  const activeFilter = document.querySelector('.filter-button-group .filter-btn.active[data-filter-type="chat-type"]');
+  const isGroupsView = activeFilter && activeFilter.dataset.filter === 'groups';
+
+  if (isGroupsView) {
+    // Filter group chats
+    if (!window.allTopGroupChats) return;
+
+    const filteredGroupsWithRank = window.allTopGroupChats
+      .map((group, originalIndex) => ({ ...group, originalRank: originalIndex + 1 }))
+      .filter(group => group.displayName.toLowerCase().includes(searchTerm));
+
+    // Re-render filtered groups
+    container.innerHTML = '';
+    filteredGroupsWithRank.slice(0, 10).forEach((groupChat) => {
+      const groupElement = document.createElement('div');
+      groupElement.className = 'contact-item';
+
+      let avatarHTML;
+      if (groupChat.avatarInitials) {
+        avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">${groupChat.avatarInitials}</div>`;
+      } else {
+        avatarHTML = `<div class="contact-avatar-placeholder group-chat-avatar">👥</div>`;
+      }
+
+      groupElement.innerHTML = `
+        <div class="contact-left">
+          <div class="contact-rank">${groupChat.originalRank}</div>
+          ${avatarHTML}
+          <div class="contact-info-item">
+            <h4>${groupChat.displayName}</h4>
+            <p>${groupChat.messageCount.toLocaleString()} texts · ${groupChat.participantCount} people</p>
+          </div>
+        </div>
+        <div class="contact-count">${groupChat.messageCount.toLocaleString()}</div>
+      `;
+
+      groupElement.addEventListener('click', () => showGroupChatDetail(groupChat));
+      container.appendChild(groupElement);
+    });
+
+    // Update load more button
+    const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
+    if (searchTerm) {
+      loadMoreBtn.style.display = filteredGroups.length > 10 ? 'flex' : 'none';
+    } else {
+      loadMoreBtn.style.display = window.allTopGroupChats.length > 10 ? 'flex' : 'none';
+    }
+  } else {
+    // Filter DM contacts
+    if (!window.allTopContacts) return;
+
+    const filteredContactsWithRank = window.allTopContacts
+      .map((contact, originalIndex) => ({ ...contact, originalRank: originalIndex + 1 }))
+      .filter(contact => contact.displayName.toLowerCase().includes(searchTerm));
+
+    // Re-render filtered contacts
+    container.innerHTML = '';
+    filteredContactsWithRank.slice(0, 10).forEach((contact) => {
+      const contactElement = document.createElement('div');
+      contactElement.className = 'contact-item';
+
+      const initials = getInitials(contact.displayName);
+      let avatarHTML = '';
+      if (contact.contactPhoto) {
+        avatarHTML = `<img src="${contact.contactPhoto}" alt="${contact.displayName}" class="contact-avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder\\'>${initials}</div>';">`;
+      } else {
+        avatarHTML = `<div class="contact-avatar-placeholder">${initials}</div>`;
+      }
+
+      contactElement.innerHTML = `
+        <div class="contact-left">
+          <div class="contact-rank">${contact.originalRank}</div>
+          ${avatarHTML}
+          <div class="contact-info-item">
+            <h4>${contact.displayName}</h4>
+            <p>${contact.messageCount.toLocaleString()} texts</p>
+          </div>
+        </div>
+        <div class="contact-count">${contact.messageCount.toLocaleString()}</div>
+      `;
+
+      contactElement.addEventListener('click', () => showContactDetail(contact));
+      container.appendChild(contactElement);
+    });
+
+    // Update load more button
+    const loadMoreBtn = document.getElementById('loadMoreContactsBtn');
+    if (searchTerm) {
+      loadMoreBtn.style.display = filteredContactsWithRank.length > 10 ? 'flex' : 'none';
+    } else {
+      loadMoreBtn.style.display = window.allTopContacts.length > 10 ? 'flex' : 'none';
+    }
   }
 }
 
@@ -2049,15 +2188,9 @@ async function showGroupChatDetail(groupChat) {
   document.getElementById('detailContactName').textContent = groupChat.displayName;
   document.getElementById('detailContactHandle').textContent = `${groupChat.participantCount} participants`;
   
-  // Populate year selector for group chat
+  // Populate year selector for group chat - will be populated after loading stats
   const contactDetailYearSelector = document.getElementById('contactDetailYearSelector');
   contactDetailYearSelector.innerHTML = '<option value="">All Time</option>';
-  availableYears.forEach(year => {
-    const option = document.createElement('option');
-    option.value = year;
-    option.textContent = year;
-    contactDetailYearSelector.appendChild(option);
-  });
   contactDetailYearSelector.value = ''; // Reset to all time
   
   // Switch filters to dropdowns for group chats
@@ -2100,7 +2233,18 @@ async function showGroupChatDetail(groupChat) {
       document.getElementById('detailRatioThem').style.width = `${themPercent}%`;
       document.getElementById('detailRatioThemPercent').textContent = `${themPercent}%`;
       document.getElementById('detailContactNameShort').textContent = 'Everyone';
-      
+
+      // Populate year selector with only years that have messages
+      if (result.stats.messagesByYear) {
+        const groupChatYears = result.stats.messagesByYear.map(y => y.year).sort((a, b) => b - a);
+        groupChatYears.forEach(year => {
+          const option = document.createElement('option');
+          option.value = year;
+          option.textContent = year;
+          contactDetailYearSelector.appendChild(option);
+        });
+      }
+
       // Load words, emojis, and reactions (default: all people)
       await loadGroupChatWords('all');
       await loadGroupChatEmojis('all');
@@ -2279,9 +2423,17 @@ async function loadGroupChatParticipants(year = null) {
 
 // Render group chat participants in a circle
 function renderGroupChatParticipants(participants) {
-  const container = document.getElementById('groupChatParticipantsList');
-  container.innerHTML = '';
-  
+  const containerParent = document.querySelector('.participants-circle-container');
+  const oldContainer = document.getElementById('groupChatParticipantsList');
+
+  // Create a new container to reset animations
+  const container = document.createElement('div');
+  container.id = 'groupChatParticipantsList';
+  container.className = 'participants-circle';
+
+  // Replace old container with new one to sync animations
+  oldContainer.replaceWith(container);
+
   const numParticipants = participants.length;
   const radius = 200; // Distance from center (wider spacing)
   
@@ -2309,7 +2461,7 @@ function renderGroupChatParticipants(participants) {
     } else {
       avatarHTML = `<div class="participant-circle-avatar-placeholder">${getInitials(participant.displayName)}</div>`;
     }
-    
+
     participantElement.innerHTML = `
       ${avatarHTML}
       <div class="participant-circle-count">${countDisplay}</div>
@@ -2720,14 +2872,17 @@ async function showContactDetail(contact) {
     reactionsSection.style.display = 'block';
   }
   
-  // Populate year selector for this contact
+  // Populate year selector for this contact - only years with messages
   contactDetailYearSelector.innerHTML = '<option value="">All Time</option>';
-  availableYears.forEach(year => {
-    const option = document.createElement('option');
-    option.value = year;
-    option.textContent = year;
-    contactDetailYearSelector.appendChild(option);
-  });
+  if (result.stats && result.stats.messagesByYear) {
+    const contactYears = result.stats.messagesByYear.map(y => y.year).sort((a, b) => b - a);
+    contactYears.forEach(year => {
+      const option = document.createElement('option');
+      option.value = year;
+      option.textContent = year;
+      contactDetailYearSelector.appendChild(option);
+    });
+  }
   contactDetailYearSelector.value = ''; // Reset to all time
   
   // Clear search results
@@ -3461,11 +3616,12 @@ async function generateStatsCard() {
       .slice(0, 5);
   }
 
-  // Title - top left
+  // Title - top left with user's first name
+  const firstName = userData?.name ? userData.name.split(' ')[0] : 'My';
   ctx.fillStyle = '#1a1a1a';
   ctx.font = '700 56px -apple-system, BlinkMacSystemFont, Inter';
   ctx.textAlign = 'left';
-  ctx.fillText('My Life in Messages', 60, 110);
+  ctx.fillText(`${firstName}'s Life in Messages`, 60, 110);
 
   // Load and draw app icon in top right (of inner card)
   const icon = new Image();
@@ -3488,7 +3644,9 @@ async function generateStatsCard() {
   });
 
   // Big stat - Total Messages
+  ctx.fillStyle = '#1a1a1a';
   ctx.font = '700 140px -apple-system, BlinkMacSystemFont, Inter';
+  ctx.textAlign = 'left';
   ctx.fillText(totalTexts.toLocaleString(), 60, 280);
   ctx.font = '24px -apple-system, BlinkMacSystemFont, Inter';
   ctx.fillStyle = '#666666';

@@ -362,6 +362,37 @@ body {
   margin-top: 4px;
 }
 
+.terminal-instructions {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 16px 0;
+}
+
+.instruction-title {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: var(--black) !important;
+  opacity: 1 !important;
+  margin-top: 16px !important;
+  margin-bottom: 8px !important;
+}
+
+.instruction-title:first-child {
+  margin-top: 0 !important;
+}
+
+.step-note {
+  font-size: 14px !important;
+  color: var(--orange) !important;
+  background: rgba(255, 149, 0, 0.1);
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-top: 16px !important;
+  font-weight: 500;
+}
+
 .step-list {
   list-style: none;
   padding-left: 0;
@@ -716,6 +747,20 @@ body {
 
   .step-detail {
     font-size: 13px !important;
+  }
+
+  .terminal-instructions {
+    padding: 16px;
+  }
+
+  .instruction-title {
+    font-size: 14px !important;
+    margin-top: 12px !important;
+  }
+
+  .step-note {
+    font-size: 13px !important;
+    padding: 10px 12px;
   }
 
   .step-list li {

@@ -1602,6 +1602,61 @@ body {
   margin: 0;
 }
 
+.top-people-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.contact-search-minimal {
+  padding: 8px 16px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
+  color: var(--black);
+  transition: all 0.2s ease;
+  outline: none;
+  width: 180px;
+}
+
+.contact-search-minimal:focus {
+  border-color: var(--black);
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.05);
+}
+
+.contact-search-minimal::placeholder {
+  color: #999;
+}
+
+.year-selector-minimal {
+  padding: 8px 12px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: white;
+  color: var(--black);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+.year-selector-minimal:hover {
+  border-color: var(--black);
+}
+
+.year-selector-minimal:focus {
+  border-color: var(--black);
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.05);
+}
+
 .load-more-btn {
   width: 100%;
   padding: 1.5vh 2vw;
@@ -1717,6 +1772,19 @@ body {
   transition: all 0.2s ease;
   gap: 1vw;
   min-width: 0;
+  animation: fadeInSlide 0.3s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .contact-item:hover {
@@ -1794,24 +1862,31 @@ body {
 }
 
 .group-chat-avatar {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-  border-color: #f5576c !important;
+  background: var(--black) !important;
+  border-color: var(--black) !important;
+  color: var(--pure-white) !important;
   font-size: 2vmin !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
 }
 
 .contact-item:hover .group-chat-avatar {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-  border-color: #f5576c !important;
+  background: var(--black) !important;
+  border-color: var(--black) !important;
+  color: var(--pure-white) !important;
 }
 
 .detail-contact-avatar.group-chat-avatar-large {
-  width: 12vmin !important;
-  height: 12vmin !important;
-  font-size: 6vmin !important;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-  border-color: #f5576c !important;
+  width: 120px !important;
+  height: 120px !important;
+  font-size: 48px !important;
+  background: var(--black) !important;
+  border: 4px solid var(--black) !important;
+  color: var(--pure-white) !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .contact-info-item {

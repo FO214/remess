@@ -36,7 +36,7 @@ function authenticateWithAuth0() {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
     const state = crypto.randomBytes(32).toString('hex');
-    
+
     // Build authorization URL with PKCE
     const authUrl = `https://${AUTH0_CONFIG.domain}/authorize?` + new URLSearchParams({
       client_id: AUTH0_CONFIG.clientId,
@@ -45,39 +45,30 @@ function authenticateWithAuth0() {
       scope: AUTH0_CONFIG.scope,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
-      state: state,
-      prompt: 'login',  // Force login screen (skips passkey in some cases)
-      // Tell Google to skip passkeys
-      screen_hint: 'signup'
+      state: state
     }).toString();
     
     // Create authentication window
     const authWindow = new BrowserWindow({
       width: 500,
       height: 700,
-      show: true,
+      show: false,  // Don't show until ready
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         webSecurity: true,
-        allowRunningInsecureContent: false
+        allowRunningInsecureContent: false,
+        partition: 'persist:auth0'
       },
-      title: 'Sign in to Remess'
+      title: 'Sign in to Remess',
+      alwaysOnTop: true,
+      modal: false
     });
-    
-    // Inject CSS to hide passkey prompts and force password
-    authWindow.webContents.on('did-finish-load', () => {
-      authWindow.webContents.insertCSS(`
-        /* Hide passkey buttons/prompts */
-        [data-challengetype="12"],
-        [data-challengetype="6"],
-        .google-passkey-button,
-        [jsname="DhK0U"] {
-          display: none !important;
-        }
-      `).catch(() => {
-        // Ignore CSS injection errors
-      });
+
+    // Show window after it's ready to prevent flickering
+    authWindow.once('ready-to-show', () => {
+      authWindow.show();
+      authWindow.focus();
     });
 
     // Load the Auth0 login page
@@ -122,41 +113,72 @@ function authenticateWithAuth0() {
         reject(new Error('Failed to load authentication page'));
       }
     });
+
+    // Allow popups
+    authWindow.webContents.setWindowOpenHandler((details) => {
+      return { action: 'allow' };
+    });
+
+    // Add timeout to prevent indefinite hanging (2 minutes)
+    const authTimeout = setTimeout(() => {
+      if (!isHandlingCallback && authWindow && !authWindow.isDestroyed()) {
+        authWindow.close();
+        reject(new Error('Authentication timed out. Please try again.'));
+      }
+    }, 120000);
+
+    // Clear timeout when authentication completes
+    const originalResolve = resolve;
+    const originalReject = reject;
+    resolve = (value) => {
+      clearTimeout(authTimeout);
+      originalResolve(value);
+    };
+    reject = (error) => {
+      clearTimeout(authTimeout);
+      originalReject(error);
+    };
   });
 }
 
 // Handle Auth0 callback
 async function handleCallback(callbackUrl, authWindow, resolve, reject, codeVerifier, state) {
+  // Check if window is already destroyed
+  if (authWindow.isDestroyed()) {
+    reject(new Error('Authentication window was closed'));
+    return;
+  }
+
   const parsedUrl = url.parse(callbackUrl, true);
-  
+
   // Check if this is our callback URL
   if (callbackUrl.startsWith(AUTH0_CONFIG.redirectUri)) {
     try {
       const code = parsedUrl.query.code;
       const returnedState = parsedUrl.query.state;
       const error = parsedUrl.query.error;
-      
+
       if (error) {
-        authWindow.close();
+        if (!authWindow.isDestroyed()) authWindow.close();
         reject(new Error(parsedUrl.query.error_description || error));
         return;
       }
-      
+
       // Verify state
       if (returnedState !== state) {
-        authWindow.close();
+        if (!authWindow.isDestroyed()) authWindow.close();
         reject(new Error('Invalid state parameter'));
         return;
       }
-      
+
       if (code) {
         // Exchange code for tokens
         const tokens = await exchangeCodeForTokens(code, codeVerifier);
-        
+
         // Get user info
         const userInfo = await getUserInfo(tokens.access_token);
-        
-        authWindow.close();
+
+        if (!authWindow.isDestroyed()) authWindow.close();
         resolve({
           user: {
             name: userInfo.name,
@@ -167,7 +189,7 @@ async function handleCallback(callbackUrl, authWindow, resolve, reject, codeVeri
         });
       }
     } catch (error) {
-      authWindow.close();
+      if (!authWindow.isDestroyed()) authWindow.close();
       reject(error);
     }
   }

@@ -214,6 +214,16 @@ ipcMain.handle('load-contacts', async () => {
   }
 });
 
+// Delete contacts CSV
+ipcMain.handle('delete-contacts', async () => {
+  try {
+    return dbHandler.deleteContactsCSV();
+  } catch (error) {
+    console.error('Error deleting contacts:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Get contact detail stats
 ipcMain.handle('get-contact-stats', async (event, contactHandle, year = null) => {
   try {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 interface GitHubAsset {
   name: string;
@@ -12,6 +13,8 @@ interface GitHubRelease {
 }
 
 export default function Home() {
+  const searchParams = useSearchParams();
+  const isUpdate = searchParams.get('update') !== null;
   const [downloadUrl, setDownloadUrl] = useState('https://github.com/FO214/remess/releases/latest');
   const [copied, setCopied] = useState(false);
 
@@ -155,7 +158,10 @@ export default function Home() {
           <h1 className="landing-title">Remess</h1>
           <p className="landing-subtitle">Your LIFE in Texts</p>
           <p className="landing-description">
-            Discover your messaging story. Every conversation. Every moment. All your texts.
+            {isUpdate 
+              ? 'Get the latest features and improvements for your messaging story.'
+              : 'Discover your messaging story. Every conversation. Every moment. All your texts.'
+            }
           </p>
           
           <a 
@@ -166,14 +172,14 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
             </svg>
-            Download for macOS
+            {isUpdate ? 'Get Latest Version' : 'Download Latest Version'}
           </a>
 
           <p className="compatibility-note">Apple Silicon • macOS 11+</p>
 
           {/* Scroll Indicator */}
           <div className="scroll-indicator">
-            <span>Scroll for setup</span>
+            <span>{isUpdate ? 'Scroll for update instructions' : 'Scroll for setup'}</span>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
@@ -184,84 +190,150 @@ export default function Home() {
       {/* Setup Instructions */}
       <div className="setup-container">
         <div className="setup-section">
-          <h2 className="setup-title">Setup Instructions</h2>
+          <h2 className="setup-title">{isUpdate ? 'Update Instructions' : 'Setup Instructions'}</h2>
           
-          <div className="setup-block">
-            <div className="setup-steps">
-            <div className="setup-step">
-              <div className="step-number">1</div>
-              <div className="step-content">
-                <h3>Download & Install</h3>
-                <p>Download Remess and drag it to your Applications folder</p>
-              </div>
-            </div>
+          {isUpdate ? (
+            // Update instructions
+            <>
+              <div className="setup-block">
+                <div className="setup-steps">
+                  <div className="setup-step">
+                    <div className="step-number">1</div>
+                    <div className="step-content">
+                      <h3>Close Remess</h3>
+                      <p>Make sure Remess is completely closed before updating</p>
+                    </div>
+                  </div>
 
-            <div className="setup-step">
-              <div className="step-number">2</div>
-              <div className="step-content">
-                <h3>Remove Quarantine Flag</h3>
-                <p>Open Terminal and run this command to allow the app to run:</p>
-                <div className="code-block">
-                  <code>xattr -cr /Applications/Remess.app</code>
-                  <button 
-                    className={`copy-button ${copied ? 'copied' : ''}`}
-                    onClick={handleCopy}
-                  >
-                    {copied ? (
-                      <>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        Copied!
-                      </>
-                    ) : (
-                      'Copy'
-                    )}
-                  </button>
+                  <div className="setup-step">
+                    <div className="step-number">2</div>
+                    <div className="step-content">
+                      <h3>Replace with New Version</h3>
+                      <p>Download and drag the new version to your Applications folder, replacing the existing app</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            </div>
-          </div>
 
-          <div className="setup-block">
-            <div className="setup-steps">
-            <div className="setup-step">
-              <div className="step-number">3</div>
-              <div className="step-content">
-                <h3>Grant Full Disk Access</h3>
-                <p>Open System Settings → Privacy & Security → Full Disk Access</p>
-                <p className="step-detail">Click the + button to add Remess to the list</p>
-              </div>
-            </div>
+              <div className="setup-block">
+                <div className="setup-steps">
+                  <div className="setup-step">
+                    <div className="step-number">3</div>
+                    <div className="step-content">
+                      <h3>Allow the Updated App to Run</h3>
+                      <p>Open Terminal and run this command to allow the updated app:</p>
+                      <div className="code-block">
+                        <code>xattr -cr /Applications/Remess.app</code>
+                        <button 
+                          className={`copy-button ${copied ? 'copied' : ''}`}
+                          onClick={handleCopy}
+                        >
+                          {copied ? (
+                            <>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                              Copied!
+                            </>
+                          ) : (
+                            'Copy'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="setup-step">
-              <div className="step-number">4</div>
-              <div className="step-content">
-                <h3>Import Your Contacts</h3>
-                <p>Export contacts from the Contacts app:</p>
-                <ul className="step-list">
-                  <li>Open Contacts app</li>
-                  <li>Select all contacts (⌘+A)</li>
-                  <li>File → Export vCard...</li>
-                  <li>Upload the .vcf file into Remess</li>
-                </ul>
+                  <div className="setup-step">
+                    <div className="step-number">4</div>
+                    <div className="step-content">
+                      <h3>You&apos;re All Set!</h3>
+                      <p>Launch Remess and enjoy the latest features. Your data is preserved automatically.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            </div>
-          </div>
+            </>
+          ) : (
+            // First-time setup instructions
+            <>
+              <div className="setup-block">
+                <div className="setup-steps">
+                  <div className="setup-step">
+                    <div className="step-number">1</div>
+                    <div className="step-content">
+                      <h3>Download & Install</h3>
+                      <p>Download Remess and drag it to your Applications folder</p>
+                    </div>
+                  </div>
 
-          <div className="setup-block">
-            <div className="setup-steps">
-            <div className="setup-step">
-              <div className="step-number">5</div>
-              <div className="step-content">
-                <h3>Enjoy Your Story!</h3>
-                <p>Remess will analyze your messages and show you amazing insights about your texting habits</p>
+                  <div className="setup-step">
+                    <div className="step-number">2</div>
+                    <div className="step-content">
+                      <h3>Allow the App to Run</h3>
+                      <p>Open Terminal (⌘ + Space, type &quot;Terminal&quot;), paste this command, and press Enter:</p>
+                      <div className="code-block">
+                        <code>xattr -cr /Applications/Remess.app</code>
+                        <button 
+                          className={`copy-button ${copied ? 'copied' : ''}`}
+                          onClick={handleCopy}
+                        >
+                          {copied ? (
+                            <>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                              Copied!
+                            </>
+                          ) : (
+                            'Copy'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            </div>
-          </div>
+
+              <div className="setup-block">
+                <div className="setup-steps">
+                  <div className="setup-step">
+                    <div className="step-number">3</div>
+                    <div className="step-content">
+                      <h3>Grant Full Disk Access</h3>
+                      <p>Open System Settings → Privacy & Security → Full Disk Access</p>
+                      <p className="step-detail">Click the + button to add Remess to the list</p>
+                    </div>
+                  </div>
+
+                  <div className="setup-step">
+                    <div className="step-number">4</div>
+                    <div className="step-content">
+                      <h3>Import Your Contacts</h3>
+                      <p>Export contacts from the Contacts app:</p>
+                      <ul className="step-list">
+                        <li>Open Contacts app</li>
+                        <li>Select all contacts (⌘+A)</li>
+                        <li>File → Export vCard...</li>
+                        <li>Upload the .vcf file into Remess</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="setup-block">
+                <div className="setup-steps">
+                  <div className="setup-step">
+                    <div className="step-number">5</div>
+                    <div className="step-content">
+                      <h3>Enjoy Your Story!</h3>
+                      <p>Remess will analyze your messages and show you amazing insights about your texting habits</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Privacy Note */}

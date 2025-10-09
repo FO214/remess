@@ -1115,12 +1115,20 @@ function searchGroupChatMessages(chatId, searchTerm, limit = 10, offset = 0, per
       date: msg.date,
       isFromMe: msg.is_from_me === 1,
       senderId: msg.sender_id,
-      formattedDate: msg.date ? 
-        new Date(msg.date / 1000000 + new Date('2001-01-01').getTime()).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          year: 'numeric' 
-        }) : 
+      formattedDate: msg.date ? (() => {
+        const msgDate = new Date(msg.date / 1000000 + new Date('2001-01-01').getTime());
+        const timeStr = msgDate.toLocaleString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        const dateStr = msgDate.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        return `${timeStr} • ${dateStr}`;
+      })() :
         'Unknown'
     }));
     
@@ -1196,7 +1204,7 @@ function getAllWords(limit = 30) {
       'don', 'ain', 've', 'll', 'won', 'doesn', 'didn', 'wasn', 'weren', 'isn', 'aren', 'hasn', 'haven',
       'hadn', 'shouldn', 'couldn', 'wouldn', 'mightn', 'mustn', 'good', 'now', 'how', 'then', 'too',
       'there', 'when', 'one', 'out', 'why', 'all', 'back', 'say', 'right', 'know']);
-    
+
     // Count word frequencies
     const wordCounts = {};
     messages.forEach(msg => {
@@ -1207,19 +1215,20 @@ function getAllWords(limit = 30) {
           .replace(/[^\w\s']/g, ' ')
           .split(/\s+/)
           .filter(w => w.length > 2 && !stopWords.has(w));
-        
+
         words.forEach(word => {
           wordCounts[word] = (wordCounts[word] || 0) + 1;
         });
       }
     });
-    
-    // Sort by frequency and return top words
+
+    // Sort by frequency and return top words with minimum count of 2
     return Object.entries(wordCounts)
+      .filter(([word, count]) => count >= 2)
       .sort((a, b) => b[1] - a[1])
       .slice(0, limit)
       .map(([word, count]) => ({ word, count }));
-    
+
   } catch (error) {
     console.error('Error getting all words:', error);
     return [];
@@ -1470,6 +1479,31 @@ function loadContactsCSV() {
  */
 function contactsCSVExists() {
   return fs.existsSync(CONTACTS_CSV_PATH);
+}
+
+/**
+ * Delete contacts CSV and avatars
+ */
+function deleteContactsCSV() {
+  try {
+    // Delete CSV file
+    if (fs.existsSync(CONTACTS_CSV_PATH)) {
+      fs.unlinkSync(CONTACTS_CSV_PATH);
+      console.log('✅ Deleted contacts CSV');
+    }
+
+    // Delete avatars directory
+    const avatarsDir = path.join(APP_DATA_DIR, 'avatars');
+    if (fs.existsSync(avatarsDir)) {
+      fs.rmSync(avatarsDir, { recursive: true, force: true });
+      console.log('✅ Deleted avatars directory');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error deleting contacts:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 /**
@@ -2782,12 +2816,20 @@ function searchContactMessages(contactHandle, searchTerm, limit = 10, offset = 0
       text: msg.text,
       date: msg.date,
       isFromMe: msg.is_from_me === 1,
-      formattedDate: msg.date ? 
-        new Date(msg.date / 1000000 + new Date('2001-01-01').getTime()).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          year: 'numeric' 
-        }) : 
+      formattedDate: msg.date ? (() => {
+        const msgDate = new Date(msg.date / 1000000 + new Date('2001-01-01').getTime());
+        const timeStr = msgDate.toLocaleString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        const dateStr = msgDate.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        return `${timeStr} • ${dateStr}`;
+      })() :
         'Unknown'
     }));
     
@@ -2945,6 +2987,7 @@ module.exports = {
   testContactsDatabase,
   saveContactsCSV,
   loadContactsCSV,
+  deleteContactsCSV,
   contactsCSVExists,
   getAvailableYears,
   getTopGroupChats,
