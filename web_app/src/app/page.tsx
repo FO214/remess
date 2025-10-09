@@ -186,8 +186,7 @@ function HomeContent() {
                           )}
                         </button>
                       </div>
-                    </div>
-                    <div className="tutorial-media">
+                      <div className="tutorial-media">
                         <video 
                           autoPlay 
                           loop 
@@ -197,6 +196,7 @@ function HomeContent() {
                           src="/tutorials/step2.mov"
                         />
                       </div>
+                    </div>
                   </div>
 
                   <div className="setup-step">
