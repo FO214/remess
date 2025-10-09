@@ -148,7 +148,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v0.1.13';
+          versionTag.textContent = 'v1.0.0';
         }
       }
     }
@@ -739,7 +739,7 @@ async function loadRealData() {
               cursor: pointer;
             `;
             notice.innerHTML = `
-              <strong>Update v0.1.13</strong><br>
+              <strong>Update v1.0.0</strong><br>
               New features and improvements available<br>
               <span style="color: var(--blue); text-decoration: underline; margin-top: 8px; display: inline-block;">Install Now</span>
             `;
