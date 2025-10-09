@@ -408,6 +408,22 @@ body {
   opacity: 0.8;
 }
 
+.tutorial-media {
+  margin-top: 20px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--pure-white);
+}
+
+.tutorial-video {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
 .step-list li::before {
   content: "→";
   position: absolute;
@@ -743,6 +759,11 @@ body {
 
   .step-content p {
     font-size: 14px;
+  }
+
+  .tutorial-media {
+    margin-top: 16px;
+    border-radius: 12px;
   }
 
   .step-detail {

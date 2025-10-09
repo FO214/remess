@@ -289,6 +289,16 @@ function HomeContent() {
                           )}
                         </button>
                       </div>
+                      <div className="tutorial-media">
+                        <video 
+                          autoPlay 
+                          loop 
+                          muted 
+                          playsInline
+                          className="tutorial-video"
+                          src="/tutorials/step2.mov"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -302,6 +312,16 @@ function HomeContent() {
                       <h3>Grant Full Disk Access</h3>
                       <p>Open System Settings → Privacy & Security → Full Disk Access</p>
                       <p className="step-detail">Click the + button to add Remess to the list</p>
+                      <div className="tutorial-media">
+                        <video 
+                          autoPlay 
+                          loop 
+                          muted 
+                          playsInline
+                          className="tutorial-video"
+                          src="/tutorials/step3.mov"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -316,6 +336,16 @@ function HomeContent() {
                         <li>File → Export vCard...</li>
                         <li>Upload the .vcf file into Remess</li>
                       </ul>
+                      <div className="tutorial-media">
+                        <video 
+                          autoPlay 
+                          loop 
+                          muted 
+                          playsInline
+                          className="tutorial-video"
+                          src="/tutorials/step4.mov"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
