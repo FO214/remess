@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 interface GitHubAsset {
@@ -12,7 +12,7 @@ interface GitHubRelease {
   assets?: GitHubAsset[];
 }
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const isUpdate = searchParams.get('update') !== null;
   const [downloadUrl, setDownloadUrl] = useState('https://github.com/FO214/remess/releases/latest');
@@ -360,5 +360,24 @@ export default function Home() {
         </footer>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="landing-container">
+        <div className="hero-section">
+          <div className="hero-content">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.png" alt="Remess" className="landing-logo" />
+            <h1 className="landing-title">Remess</h1>
+            <p className="landing-subtitle">Your LIFE in Texts</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
