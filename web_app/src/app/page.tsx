@@ -15,18 +15,53 @@ interface GitHubRelease {
 function HomeContent() {
   const searchParams = useSearchParams();
   const isUpdate = searchParams.get('update') !== null;
-  const [downloadUrl, setDownloadUrl] = useState('https://github.com/FO214/remess/releases/latest');
+  const [downloadUrlArm, setDownloadUrlArm] = useState('https://github.com/FO214/remess/releases/latest');
+  const [downloadUrlIntel, setDownloadUrlIntel] = useState('https://github.com/FO214/remess/releases/latest');
+  const [isAppleSilicon, setIsAppleSilicon] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    // Detect if user is on Apple Silicon
+    const checkArchitecture = async () => {
+      // Check for Apple Silicon using GPU detection
+      if (navigator.userAgent.includes('Mac')) {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl');
+          if (gl) {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+              const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+              setIsAppleSilicon(renderer.includes('Apple'));
+            }
+          }
+        } catch (e) {
+          // Default to Apple Silicon as it's more common now
+          setIsAppleSilicon(true);
+        }
+      }
+    };
+    checkArchitecture();
+
     // Fetch the latest release info from GitHub API
     fetch('https://api.github.com/repos/FO214/remess/releases/latest')
       .then(res => res.json())
       .then((data: GitHubRelease) => {
-        // Find the .dmg asset
-        const dmgAsset = data.assets?.find((asset: GitHubAsset) => asset.name.endsWith('.dmg'));
-        if (dmgAsset) {
-          setDownloadUrl(dmgAsset.browser_download_url);
+        // Find both architecture assets
+        // Apple Silicon has -arm64 suffix
+        const arm64Asset = data.assets?.find((asset: GitHubAsset) => 
+          asset.name.includes('-arm64.dmg')
+        );
+        // Intel x64 has no architecture suffix (just version.dmg)
+        const x64Asset = data.assets?.find((asset: GitHubAsset) => 
+          asset.name.endsWith('.dmg') && !asset.name.includes('arm64') && !asset.name.includes('x64')
+        );
+        
+        if (arm64Asset) {
+          setDownloadUrlArm(arm64Asset.browser_download_url);
+        }
+        if (x64Asset) {
+          setDownloadUrlIntel(x64Asset.browser_download_url);
         }
       })
       .catch(err => {
@@ -111,7 +146,7 @@ function HomeContent() {
           </p>
           
           <a 
-            href={downloadUrl}
+            href={isAppleSilicon ? downloadUrlArm : downloadUrlIntel}
             className="download-button"
             download
           >
@@ -121,7 +156,7 @@ function HomeContent() {
             {isUpdate ? 'Get Latest Version' : 'Download Latest Version'}
           </a>
 
-          <p className="compatibility-note">Apple Silicon • macOS 11+</p>
+          <p className="compatibility-note">{isAppleSilicon ? 'Apple Silicon' : 'Intel'} • macOS 11+</p>
 
           {/* Scroll Indicator */}
           <div className="scroll-indicator">
