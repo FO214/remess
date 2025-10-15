@@ -492,10 +492,53 @@ ipcMain.handle('install-update', async () => {
   log.info('Opening GitHub releases for manual update...');
   // For unsigned builds, we can't auto-install, so open the releases page
   await shell.openExternal('https://github.com/FO214/remess/releases/latest');
-  
+
   // Give user time to see the browser open, then quit
   setTimeout(() => {
     log.info('Quitting app for manual update...');
     app.quit();
   }, 1500);
+});
+
+// Get word usage over time
+ipcMain.handle('get-word-usage-over-time', async (event, word, scope, scopeId, filterInfo) => {
+  try {
+    const data = dbHandler.getWordUsageOverTime(word, scope, scopeId, filterInfo);
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting word usage over time:', error);
+    return { success: false, error: error.message, data: [] };
+  }
+});
+
+// Get common phrases with word
+ipcMain.handle('get-common-phrases', async (event, word, scope, scopeId, limit, filterInfo) => {
+  try {
+    const phrases = dbHandler.getCommonPhrases(word, scope, scopeId, limit, filterInfo);
+    return { success: true, phrases };
+  } catch (error) {
+    console.error('Error getting common phrases:', error);
+    return { success: false, error: error.message, phrases: [] };
+  }
+});
+
+// Get group chat participant handles
+ipcMain.handle('get-contact-info', async (event, handleId) => {
+  try {
+    const info = dbHandler.getContactInfo(handleId);
+    return { success: true, info };
+  } catch (error) {
+    console.error('Error getting contact info:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-group-chat-participant-handles', async (event, chatId) => {
+  try {
+    const handles = dbHandler.getGroupChatParticipantHandles(chatId);
+    return { success: true, handles };
+  } catch (error) {
+    console.error('Error getting group chat participant handles:', error);
+    return { success: false, error: error.message, handles: {} };
+  }
 });

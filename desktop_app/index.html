@@ -212,9 +212,7 @@
   <!-- Loading Screen -->
   <div class="loading-container" id="loadingContainer" style="display: none;">
     <div class="loading-content">
-      <div class="loading-spinner"></div>
-      <h2 class="loading-title">Loading your data...</h2>
-      <p class="loading-subtitle">Preparing your messaging story</p>
+      <img src="icon.png" alt="Loading" class="loading-icon">
     </div>
   </div>
 
@@ -796,6 +794,32 @@
             <polyline points="7 3 7 8 15 8"/>
           </svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Word Usage Modal -->
+  <div class="word-modal" id="wordModal" style="display: none;">
+    <div class="word-modal-overlay" id="wordModalOverlay"></div>
+    <div class="word-modal-content">
+      <button class="word-modal-close" id="wordModalClose">&times;</button>
+      <h2 id="wordModalTitle">Word Usage: "<span id="wordModalWord"></span>"</h2>
+      <p id="wordModalScope" class="word-modal-scope"></p>
+
+      <!-- Usage Over Time Chart -->
+      <div class="word-modal-section">
+        <h3>📈 Usage Over Time</h3>
+        <div class="word-modal-chart-container">
+          <canvas id="wordUsageChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Common Phrases -->
+      <div class="word-modal-section">
+        <h3>💬 Common Phrases</h3>
+        <div id="wordPhrasesList" class="word-phrases-list">
+          <!-- Phrases will be populated here -->
+        </div>
       </div>
     </div>
   </div>

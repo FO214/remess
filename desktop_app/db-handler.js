@@ -718,33 +718,47 @@ function getGroupChatStats(chatId, year = null) {
       ORDER BY message_date
     `;
     const dates = db.prepare(streakQuery).all(...params);
-    
+
     let longestStreak = 0;
+    let longestStreakStart = null;
+    let longestStreakEnd = null;
     let currentStreak = 0;
+    let currentStreakStart = null;
     let lastDate = null;
-    
+
     dates.forEach(row => {
       if (row.message_date) {
         const currentDate = new Date(row.message_date);
-        
+
         if (lastDate) {
           const dayDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-          
+
           if (dayDiff === 1) {
             currentStreak++;
           } else {
-            longestStreak = Math.max(longestStreak, currentStreak);
+            if (currentStreak > longestStreak) {
+              longestStreak = currentStreak;
+              longestStreakStart = currentStreakStart;
+              longestStreakEnd = lastDate;
+            }
             currentStreak = 1;
+            currentStreakStart = currentDate;
           }
         } else {
           currentStreak = 1;
+          currentStreakStart = currentDate;
         }
-        
+
         lastDate = currentDate;
       }
     });
-    
-    longestStreak = Math.max(longestStreak, currentStreak);
+
+    // Check final streak
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak;
+      longestStreakStart = currentStreakStart;
+      longestStreakEnd = lastDate;
+    }
     
     db.close();
     
@@ -758,6 +772,8 @@ function getGroupChatStats(chatId, year = null) {
       mostActiveYearCount: mostActiveYearCount,
       avgPerDay: avgPerDay,
       longestStreak: longestStreak,
+      longestStreakStart: longestStreakStart,
+      longestStreakEnd: longestStreakEnd,
       displayName: chatInfo?.display_name || chatInfo?.chat_identifier || 'Unnamed Group',
       participantCount: chatInfo?.participant_count || 0
     };
@@ -1735,33 +1751,47 @@ function getContactStats(contactHandle) {
       ORDER BY message_date
     `;
     const dates = db.prepare(streakQuery).all(contactHandle, ...exclusion.params);
-    
+
     let longestStreak = 0;
+    let longestStreakStart = null;
+    let longestStreakEnd = null;
     let currentStreak = 0;
+    let currentStreakStart = null;
     let lastDate = null;
-    
+
     dates.forEach(row => {
       if (row.message_date) {
         const currentDate = new Date(row.message_date);
-        
+
         if (lastDate) {
           const dayDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-          
+
           if (dayDiff === 1) {
             currentStreak++;
           } else {
-            longestStreak = Math.max(longestStreak, currentStreak);
+            if (currentStreak > longestStreak) {
+              longestStreak = currentStreak;
+              longestStreakStart = currentStreakStart;
+              longestStreakEnd = lastDate;
+            }
             currentStreak = 1;
+            currentStreakStart = currentDate;
           }
         } else {
           currentStreak = 1;
+          currentStreakStart = currentDate;
         }
-        
+
         lastDate = currentDate;
       }
     });
-    
-    longestStreak = Math.max(longestStreak, currentStreak);
+
+    // Check final streak
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak;
+      longestStreakStart = currentStreakStart;
+      longestStreakEnd = lastDate;
+    }
     
     db.close();
     
@@ -1774,7 +1804,9 @@ function getContactStats(contactHandle) {
       mostActiveYear: mostActiveYear,
       mostActiveYearCount: mostActiveYearCount,
       avgPerDay: avgPerDay,
-      longestStreak: longestStreak
+      longestStreak: longestStreak,
+      longestStreakStart: longestStreakStart,
+      longestStreakEnd: longestStreakEnd
     };
     
   } catch (error) {
@@ -2307,7 +2339,10 @@ function getCombinedContactStats(contactHandles) {
     const dates = db.prepare(streakQuery).all(...contactHandles, ...exclusion.params);
 
     let longestStreak = 0;
+    let longestStreakStart = null;
+    let longestStreakEnd = null;
     let currentStreak = 0;
+    let currentStreakStart = null;
     let lastDate = null;
 
     dates.forEach(row => {
@@ -2320,19 +2355,33 @@ function getCombinedContactStats(contactHandles) {
           if (dayDiff === 1) {
             currentStreak++;
           } else {
-            longestStreak = Math.max(longestStreak, currentStreak);
+            if (currentStreak > longestStreak) {
+              longestStreak = currentStreak;
+              longestStreakStart = currentStreakStart;
+              longestStreakEnd = lastDate;
+            }
             currentStreak = 1;
+            currentStreakStart = currentDate;
           }
         } else {
           currentStreak = 1;
+          currentStreakStart = currentDate;
         }
 
         lastDate = currentDate;
       }
     });
 
-    longestStreak = Math.max(longestStreak, currentStreak);
+    // Check final streak
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak;
+      longestStreakStart = currentStreakStart;
+      longestStreakEnd = lastDate;
+    }
+
     combined.longestStreak = longestStreak;
+    combined.longestStreakStart = longestStreakStart;
+    combined.longestStreakEnd = longestStreakEnd;
 
     db.close();
 
@@ -2968,6 +3017,364 @@ function getGroupChatReactions(chatId, personId = null, year = null) {
   }
 }
 
+/**
+ * Get word usage over time (by month) for all messages
+ */
+function getWordUsageOverTime(word, scope = 'all', scopeId = null, filterInfo = { type: 'all', value: null }) {
+  try {
+    if (!cloneExists()) {
+      return [];
+    }
+
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+    const lowerWord = word.toLowerCase();
+
+    let query = '';
+    let params = [];
+
+    if (scope === 'all') {
+      // All messages - group by year
+      query = `
+        SELECT
+          strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) as year,
+          COUNT(*) as count
+        FROM message
+        WHERE message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+        GROUP BY year
+        ORDER BY year ASC
+      `;
+      params = [lowerWord];
+    } else if (scope === 'contact') {
+      // Contact DM messages - group by year, handle filter
+      const exclusionClause = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
+
+      query = `
+        SELECT
+          strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) as year,
+          COUNT(*) as count,
+          SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) as you_count,
+          SUM(CASE WHEN message.is_from_me = 0 THEN 1 ELSE 0 END) as them_count
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        JOIN chat ON chat_message_join.chat_id = chat.ROWID
+        JOIN handle ON chat.ROWID = (
+          SELECT chat_handle_join.chat_id
+          FROM chat_handle_join
+          WHERE chat_handle_join.handle_id = handle.ROWID
+          LIMIT 1
+        )
+        WHERE handle.id = ?
+          AND ${exclusionClause}
+          AND message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+        GROUP BY year
+        ORDER BY year ASC
+      `;
+      params = [scopeId, ...EXCLUDED_NUMBERS, lowerWord];
+    } else if (scope === 'group') {
+      // Group chat messages - get per-person data by year
+      // If filtering by specific person, add WHERE clause
+      let personFilter = '';
+      if (filterInfo && filterInfo.type === 'person' && filterInfo.value) {
+        if (filterInfo.value === 'you') {
+          personFilter = 'AND message.is_from_me = 1';
+        } else {
+          personFilter = 'AND COALESCE(handle.id, \'unknown\') = ?';
+          params.push(filterInfo.value);
+        }
+      }
+
+      query = `
+        SELECT
+          strftime('%Y', datetime(message.date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch')) as year,
+          CASE WHEN message.is_from_me = 1 THEN 'you' ELSE COALESCE(handle.id, 'unknown') END as person,
+          COUNT(*) as count
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE chat_message_join.chat_id = ?
+          AND message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+          ${personFilter}
+        GROUP BY year, person
+        ORDER BY year ASC, person
+      `;
+
+      // Build params in correct order
+      const baseParams = [scopeId, lowerWord];
+      if (personFilter && filterInfo.value !== 'you') {
+        params = [...baseParams, filterInfo.value];
+      } else {
+        params = baseParams;
+      }
+    }
+
+    const results = db.prepare(query).all(...params);
+    db.close();
+
+    if (scope === 'group') {
+      // Transform group chat results to include per-person data
+      return results.map(row => ({
+        year: row.year,
+        person: row.person,
+        count: row.count
+      }));
+    } else {
+      return results.map(row => ({
+        year: row.year,
+        count: row.count,
+        youCount: row.you_count || 0,
+        themCount: row.them_count || 0
+      }));
+    }
+  } catch (error) {
+    console.error('Error getting word usage over time:', error);
+    return [];
+  }
+}
+
+/**
+ * Get common phrases containing a specific word
+ */
+function getCommonPhrases(word, scope = 'all', scopeId = null, limit = 10, filterInfo = { type: 'all', value: null }) {
+  try {
+    if (!cloneExists()) {
+      return [];
+    }
+
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+    const lowerWord = word.toLowerCase();
+
+    let query = '';
+    let params = [];
+
+    if (scope === 'all') {
+      // All messages
+      query = `
+        SELECT
+          message.text,
+          message.is_from_me,
+          COUNT(*) as frequency
+        FROM message
+        WHERE message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+        GROUP BY LOWER(message.text)
+        ORDER BY frequency DESC
+        LIMIT ?
+      `;
+      params = [lowerWord, limit];
+    } else if (scope === 'contact') {
+      // Contact DM messages - handle filter
+      const exclusionClause = EXCLUDED_NUMBERS.map(() => `handle.id != ?`).join(' AND ');
+
+      let personFilter = '';
+      if (filterInfo && filterInfo.type === 'you') {
+        personFilter = 'AND message.is_from_me = 1';
+      } else if (filterInfo && filterInfo.type === 'them') {
+        personFilter = 'AND message.is_from_me = 0';
+      }
+
+      query = `
+        SELECT
+          message.text,
+          message.is_from_me,
+          COUNT(*) as frequency
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        JOIN chat ON chat_message_join.chat_id = chat.ROWID
+        JOIN handle ON chat.ROWID = (
+          SELECT chat_handle_join.chat_id
+          FROM chat_handle_join
+          WHERE chat_handle_join.handle_id = handle.ROWID
+          LIMIT 1
+        )
+        WHERE handle.id = ?
+          AND ${exclusionClause}
+          AND message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+          ${personFilter}
+        GROUP BY LOWER(message.text)
+        ORDER BY frequency DESC
+        LIMIT ?
+      `;
+      params = [scopeId, ...EXCLUDED_NUMBERS, lowerWord, limit];
+    } else if (scope === 'group') {
+      // Group chat messages - need to get participant info
+      let personFilter = '';
+      if (filterInfo && filterInfo.type === 'person' && filterInfo.value) {
+        if (filterInfo.value === 'you') {
+          personFilter = 'AND message.is_from_me = 1';
+        } else {
+          personFilter = 'AND COALESCE(handle.id, \'unknown\') = ?';
+        }
+      }
+
+      query = `
+        SELECT
+          message.text,
+          message.is_from_me,
+          handle.id as sender_handle,
+          COUNT(*) as frequency
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE chat_message_join.chat_id = ?
+          AND message.text IS NOT NULL
+          AND message.text != ''
+          AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+          AND LOWER(message.text) LIKE '%' || ? || '%'
+          ${personFilter}
+        GROUP BY LOWER(message.text), sender_handle
+        ORDER BY frequency DESC
+        LIMIT ?
+      `;
+
+      // Build params in correct order
+      if (personFilter && filterInfo.value && filterInfo.value !== 'you') {
+        params = [scopeId, lowerWord, filterInfo.value, limit];
+      } else {
+        params = [scopeId, lowerWord, limit];
+      }
+    }
+
+    const results = db.prepare(query).all(...params);
+    db.close();
+
+    return results.map(row => ({
+      text: row.text,
+      frequency: row.frequency,
+      isFromMe: row.is_from_me === 1,
+      senderHandle: row.sender_handle || null
+    }));
+  } catch (error) {
+    console.error('Error getting common phrases:', error);
+    return [];
+  }
+}
+
+/**
+ * Get participants info for group chat (for phrase attribution)
+ */
+function getGroupChatParticipantHandles(chatId) {
+  try {
+    if (!cloneExists()) {
+      return {};
+    }
+
+    const db = new Database(CLONE_DB_PATH, { readonly: true });
+
+    const query = `
+      SELECT
+        handle.id,
+        handle.ROWID as handle_rowid
+      FROM chat_handle_join
+      JOIN handle ON chat_handle_join.handle_id = handle.ROWID
+      WHERE chat_handle_join.chat_id = ?
+    `;
+
+    const participants = db.prepare(query).all(chatId);
+    db.close();
+
+    // Load contacts to get names
+    const contacts = loadContactsCSV();
+    const handleMap = {};
+
+    participants.forEach(p => {
+      // Skip email addresses
+      if (p.id.includes('@')) {
+        const contact = contacts.find(c => c.phone === p.id);
+        handleMap[p.id] = {
+          name: contact ? contact.name : p.id,
+          photo: contact ? contact.photo : null
+        };
+        return;
+      }
+
+      // Normalize the handle ID (remove all non-digits for comparison)
+      const normalizedHandle = p.id.replace(/\D/g, '');
+
+      const contact = contacts.find(c => {
+        if (!c.phone) return false;
+
+        // Normalize the contact phone number
+        const normalizedContactPhone = c.phone.replace(/\D/g, '');
+
+        // Try exact match or last 10 digits match
+        const exactMatch = normalizedHandle === normalizedContactPhone;
+        const last10Match = normalizedHandle.slice(-10) === normalizedContactPhone.slice(-10) &&
+                           normalizedHandle.slice(-10).length === 10;
+
+        return exactMatch || last10Match;
+      });
+
+      // Return both name and photo
+      handleMap[p.id] = {
+        name: contact ? contact.name : p.id,
+        photo: contact ? contact.photo : null
+      };
+    });
+
+    return handleMap;
+  } catch (error) {
+    console.error('Error getting group chat participant handles:', error);
+    return {};
+  }
+}
+
+/**
+ * Get contact info (name and photo) by phone number or handle
+ */
+function getContactInfo(handleId) {
+  try {
+    const contacts = loadContactsCSV();
+
+    // Handle email addresses
+    if (handleId.includes('@')) {
+      const contact = contacts.find(c => c.phone === handleId);
+      return {
+        name: contact ? contact.name : handleId,
+        photo: contact ? contact.photo : null
+      };
+    }
+
+    // Normalize the handle ID (remove all non-digits for comparison)
+    const normalizedHandle = handleId.replace(/\D/g, '');
+
+    const contact = contacts.find(c => {
+      if (!c.phone) return false;
+
+      // Normalize the contact phone number
+      const normalizedContactPhone = c.phone.replace(/\D/g, '');
+
+      // Try exact match or last 10 digits match
+      const exactMatch = normalizedHandle === normalizedContactPhone;
+      const last10Match = normalizedHandle.slice(-10) === normalizedContactPhone.slice(-10) &&
+                         normalizedHandle.slice(-10).length === 10;
+
+      return exactMatch || last10Match;
+    });
+
+    return {
+      name: contact ? contact.name : handleId,
+      photo: contact ? contact.photo : null
+    };
+  } catch (error) {
+    console.error('Error getting contact info:', error);
+    return { name: handleId, photo: null };
+  }
+}
+
 module.exports = {
   checkFullDiskAccess,
   cloneChatDatabase,
@@ -3012,6 +3419,9 @@ module.exports = {
   getCombinedContactEmojisByYear,
   getContactReactions,
   searchContactMessages,
+  getWordUsageOverTime,
+  getCommonPhrases,
+  getGroupChatParticipantHandles,
   CLONE_DB_PATH,
   CONTACTS_CLONE_PATH
 };

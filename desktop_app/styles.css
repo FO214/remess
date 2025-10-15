@@ -874,31 +874,19 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.loading-spinner {
-  width: 7vmin;
-  height: 7vmin;
-  border: 0.5vmin solid var(--light-gray);
-  border-top: 0.5vmin solid var(--black);
-  border-radius: 50%;
-  margin: 0 auto 3vh;
-  animation: spin 1s linear infinite;
+.loading-icon {
+  width: 80px;
+  height: 80px;
+  animation: float 2s ease-in-out infinite;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-title {
-  font-size: 3.5vmin;
-  font-weight: 700;
-  color: var(--black);
-  margin-bottom: 1vh;
-}
-
-.loading-subtitle {
-  font-size: 2vmin;
-  color: var(--medium-gray);
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
 }
 
 /* WRAPPED EXPERIENCE */
@@ -3034,4 +3022,184 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--black);
+}
+
+/* ============================================
+   WORD USAGE MODAL
+   ============================================ */
+
+.word-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.word-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.word-modal-content {
+  position: relative;
+  background: var(--pure-white);
+  border-radius: 24px;
+  padding: 40px;
+  max-width: 900px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease;
+}
+
+.word-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: var(--medium-gray);
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.word-modal-close:hover {
+  background: var(--off-white);
+  color: var(--black);
+}
+
+.word-modal-content h2 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--black);
+}
+
+.word-modal-scope {
+  font-size: 16px;
+  color: var(--medium-gray);
+  margin-bottom: 30px;
+}
+
+.word-modal-section {
+  margin-bottom: 32px;
+}
+
+.word-modal-section:last-child {
+  margin-bottom: 0;
+}
+
+.word-modal-section h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--black);
+  margin-bottom: 16px;
+}
+
+.word-modal-chart-container {
+  position: relative;
+  min-height: 300px;
+  width: 100%;
+  background: var(--off-white);
+  border-radius: 12px;
+  padding: 20px;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.word-chart-canvas-wrapper {
+  position: relative;
+  height: 240px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.word-phrases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.word-phrase-item {
+  padding: 16px 20px;
+  background: var(--off-white);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  animation: fadeIn 0.4s ease-out backwards;
+}
+
+.word-phrase-item:hover {
+  border-color: var(--black);
+  transform: translateX(4px);
+  box-shadow: 2px 2px 0 var(--black);
+}
+
+.word-phrase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.word-phrase-sender {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: white;
+}
+
+.word-phrase-sender.from-me {
+  color: var(--black);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.word-phrase-sender.from-them {
+  color: var(--medium-gray);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.word-phrase-frequency {
+  font-size: 12px;
+  color: var(--medium-gray);
+  font-weight: 600;
+}
+
+.word-phrase-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--black);
+  word-wrap: break-word;
+}
+
+/* Make word items clickable */
+.word-item {
+  cursor: pointer;
+  user-select: none;
+}
+
+.word-item:active {
+  transform: translateY(-1px) scale(0.98);
 }
