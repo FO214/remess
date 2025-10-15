@@ -198,7 +198,7 @@ function setupUpdateListeners() {
   
   // Update now button - redirect to remess.me
   updateNowBtn.addEventListener('click', async () => {
-    await window.electron.openURL('https://remess.me');
+    await window.electron.openURL('https://remess.me/?update');
   });
   
   // Later button
