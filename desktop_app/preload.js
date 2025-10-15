@@ -34,7 +34,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGroupChatWords: (chatId, limit, personId, year) => ipcRenderer.invoke('get-group-chat-words', chatId, limit, personId, year),
   getGroupChatEmojis: (chatId, limit, personId, year) => ipcRenderer.invoke('get-group-chat-emojis', chatId, limit, personId, year),
   searchGroupChatMessages: (chatId, searchTerm, limit, offset, personId) => ipcRenderer.invoke('search-group-chat-messages', chatId, searchTerm, limit, offset, personId),
-  getGroupChatReactions: (chatId, personId, year) => ipcRenderer.invoke('get-group-chat-reactions', chatId, personId, year)
+  getGroupChatReactions: (chatId, personId, year) => ipcRenderer.invoke('get-group-chat-reactions', chatId, personId, year),
+  // Word analysis
+  getWordUsageOverTime: (word, scope, scopeId, filterInfo) => ipcRenderer.invoke('get-word-usage-over-time', word, scope, scopeId, filterInfo),
+  getCommonPhrases: (word, scope, scopeId, limit, filterInfo) => ipcRenderer.invoke('get-common-phrases', word, scope, scopeId, limit, filterInfo),
+  getGroupChatParticipantHandles: (chatId) => ipcRenderer.invoke('get-group-chat-participant-handles', chatId),
+  getContactInfo: (handleId) => ipcRenderer.invoke('get-contact-info', handleId)
 });
 
 contextBridge.exposeInMainWorld('electron', {

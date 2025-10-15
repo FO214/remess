@@ -132,6 +132,7 @@ const totalSlides = 7;
 async function init() {
   try {
     setupEventListeners();
+    setupWordModal();
     await checkAuthStatus();
     initShareStats();
 
@@ -212,7 +213,7 @@ function setupEventListeners() {
   backToLandingBtn.addEventListener('click', showLandingScreen);
   googleSignInBtn.addEventListener('click', handleGoogleSignIn);
   signOutBtn.addEventListener('click', handleSignOut);
-  backToDashboardBtn.addEventListener('click', showDashboard);
+  backToDashboardBtn.addEventListener('click', () => showDashboard(true));
   
   // Profile dropdown toggle
   userProfile.addEventListener('click', (e) => {
@@ -1134,24 +1135,31 @@ function skipToDashboard() {
 }
 
 // Show dashboard with data
-function showDashboard() {
+function showDashboard(skipLoad = false) {
   // Hide auth and wrapped, show dashboard
   authContainer.style.display = 'none';
   permissionsContainer.style.display = 'none';
-  loadingContainer.style.display = 'none';
   wrappedContainer.style.display = 'none';
   contactDetailContainer.style.display = 'none';
   dashboardContainer.style.display = 'flex';
-  
+
+  // Only show loading screen if we need to load data
+  if (skipLoad) {
+    loadingContainer.style.display = 'none';
+  } else {
+    // Keep loading screen visible until dashboard data is loaded
+    loadingContainer.style.display = 'flex';
+  }
+
   // Restore the year selector value
   if (topContactsYearSelector) {
     topContactsYearSelector.value = currentDashboardYear;
   }
-  
+
   // Update user info from Auth0 - always show name and avatar
   const displayName = userData?.name || userData?.email || 'User';
   userName.textContent = displayName;
-  
+
   // Set Auth0 profile picture
   if (userData?.avatar) {
     userAvatar.src = userData.avatar;
@@ -1165,9 +1173,11 @@ function showDashboard() {
     // No avatar provided
     userAvatar.style.display = 'none';
   }
-  
-  // Load dashboard data
-  loadDashboardData();
+
+  // Load dashboard data only if not skipping
+  if (!skipLoad) {
+    loadDashboardData();
+  }
 }
 
 // Load dashboard data
@@ -1181,7 +1191,16 @@ async function loadDashboardData() {
   const stats = userData.stats;
   const messagesByYear = userData.messagesByYear;
   const topContacts = userData.topContacts;
-  
+
+  // Set global min/max years from messagesByYear data
+  if (messagesByYear && messagesByYear.length > 0) {
+    const years = messagesByYear.map(m => parseInt(m.year)).filter(y => !isNaN(y));
+    if (years.length > 0) {
+      globalMinYear = Math.min(...years);
+      globalMaxYear = Math.max(...years);
+    }
+  }
+
   // Load available years for the year selector
   await populateYearSelectors();
   
@@ -1215,6 +1234,9 @@ async function loadDashboardData() {
 
     // Load dashboard word cloud
     loadDashboardWords();
+
+    // Hide loading screen now that everything is loaded
+    loadingContainer.style.display = 'none';
   }, 500);
 }
 
@@ -1222,15 +1244,19 @@ async function loadDashboardData() {
 async function loadDashboardWords() {
   try {
     const result = await window.electronAPI.getAllWords(30);
-    
+
     if (result.success && result.words) {
       const wordCloud = document.getElementById('dashboardWordCloud');
       wordCloud.innerHTML = '';
-      
+
       if (result.words.length > 0) {
         result.words.forEach((word, index) => {
           const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
-          wordCloud.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
+          const wordElement = document.createElement('span');
+          wordElement.className = `word-item ${sizeClass}`;
+          wordElement.textContent = word.word;
+          makeWordClickable(wordElement, word.word, 'all', null, 'All Messages');
+          wordCloud.appendChild(wordElement);
         });
       } else {
         wordCloud.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
@@ -1261,7 +1287,7 @@ function animateValue(elementId, start, end, duration) {
 // Create Messages Over Time Chart
 function createMessagesOverTimeChart(messagesByYearData) {
   const ctx = document.getElementById('messagesChart').getContext('2d');
-  
+
   // Convert data format if it's an array (from real data)
   let yearData = messagesByYearData;
   if (Array.isArray(messagesByYearData)) {
@@ -1270,9 +1296,13 @@ function createMessagesOverTimeChart(messagesByYearData) {
       yearData[item.year] = item.count;
     });
   }
-  
-  const years = Object.keys(yearData);
-  const values = Object.values(yearData);
+
+  // Get all years from global range, fallback to data years if not available
+  let years = getAllYearsRange();
+  if (!years || years.length === 0) {
+    years = Object.keys(yearData).sort();
+  }
+  const values = years.map(year => yearData[year] || 0);
   
   charts.messagesChart = new Chart(ctx, {
     type: 'line',
@@ -1888,18 +1918,35 @@ function getInitials(name) {
   return name[0].toUpperCase();
 }
 
+// Global variable to store min/max years from the database
+let globalMinYear = null;
+let globalMaxYear = null;
+
+// Helper function to get all years range based on global min/max
+function getAllYearsRange() {
+  if (globalMinYear === null || globalMaxYear === null) {
+    return [];
+  }
+
+  const allYears = [];
+  for (let year = globalMinYear; year <= globalMaxYear; year++) {
+    allYears.push(year.toString());
+  }
+  return allYears;
+}
+
 // Helper function to format phone numbers
 function formatPhoneNumber(phone) {
   if (!phone) return '';
-  
+
   // If it's an email, return as-is
   if (phone.includes('@')) {
     return phone;
   }
-  
+
   // Clean the phone number (remove all non-digits)
   const cleaned = phone.replace(/\D/g, '');
-  
+
   // Format based on length
   if (cleaned.length === 11 && cleaned[0] === '1') {
     // US number with country code: 1 (234) 567-8901
@@ -1913,9 +1960,33 @@ function formatPhoneNumber(phone) {
     const number = cleaned.slice(-10);
     return `+${countryCode} (${number.slice(0, 3)}) ${number.slice(3, 6)}-${number.slice(6)}`;
   }
-  
+
   // If it doesn't match any pattern, return original
   return phone;
+}
+
+function formatStreakDisplay(longestStreak, longestStreakStart, longestStreakEnd) {
+  if (!longestStreak) return '-';
+
+  // Format dates as "MMM D, YYYY"
+  const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  };
+
+  const startStr = formatDate(longestStreakStart);
+  const endStr = formatDate(longestStreakEnd);
+
+  if (startStr && endStr) {
+    return `<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+      <div style="font-size: 1em; color: #2c2c2c; line-height: 1.2;">${startStr} - ${endStr}</div>
+      <div style="font-size: 0.85em; color: rgba(44, 44, 44, 0.6); line-height: 1.2;">${longestStreak} days</div>
+    </div>`;
+  } else {
+    return `${longestStreak} days`;
+  }
 }
 
 // ============================================
@@ -1938,7 +2009,7 @@ async function handleChatTypeChange(chatType) {
     z-index: 10;
   `;
   loadingOverlay.innerHTML = `
-    <img src="icon.png" alt="Loading" style="width: 60px; height: 60px; animation: bounce 2s ease-in-out infinite;">
+    <img src="icon.png" alt="Loading" style="width: 60px; height: 60px; animation: float 2s ease-in-out infinite;">
   `;
 
   // Fade out current content
@@ -2171,6 +2242,7 @@ async function renderGroupChats(groupChatsData) {
 async function showGroupChatDetail(groupChat) {
   // Store current group chat ID and clear contact handle
   window.currentGroupChatId = groupChat.chatId;
+  window.currentGroupChatName = groupChat.displayName;
   window.currentContactHandle = null;
   
   // Hide dashboard, show detail
@@ -2219,7 +2291,7 @@ async function showGroupChatDetail(groupChat) {
       document.getElementById('detailFirstMessage').textContent = firstDate;
       document.getElementById('detailMostActiveYear').textContent = result.stats.mostActiveYear || '-';
       document.getElementById('detailAvgPerDay').textContent = `${result.stats.avgPerDay} texts/day`;
-      document.getElementById('detailLongestStreak').textContent = result.stats.longestStreak ? `${result.stats.longestStreak} days` : '-';
+      document.getElementById('detailLongestStreak').innerHTML = formatStreakDisplay(result.stats.longestStreak, result.stats.longestStreakStart, result.stats.longestStreakEnd);
       
       // Create chart
       createContactMessagesChart(result.stats.messagesByYear);
@@ -2476,13 +2548,17 @@ function renderGroupChatParticipants(participants) {
 }
 
 // Render word cloud (helper function)
-function renderWordCloud(words, container) {
+function renderWordCloud(words, container, scope = 'all', scopeId = null, scopeName = 'All Messages') {
   container.innerHTML = '';
-  
+
   if (words && words.length > 0) {
     words.forEach((word, index) => {
       const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
-      container.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
+      const wordElement = document.createElement('span');
+      wordElement.className = `word-item ${sizeClass}`;
+      wordElement.textContent = word.word;
+      makeWordClickable(wordElement, word.word, scope, scopeId, scopeName);
+      container.appendChild(wordElement);
     });
   } else {
     container.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
@@ -2511,9 +2587,10 @@ function renderEmojiStats(emojis, container) {
 async function loadGroupChatWords(personId, year = null) {
   try {
     const result = await window.electronAPI.getGroupChatWords(window.currentGroupChatId, 20, personId, year);
-    
+
     if (result.success && result.words) {
-      renderWordCloud(result.words, document.getElementById('detailWordCloud'));
+      const groupName = window.currentGroupChatName || 'Group Chat';
+      renderWordCloud(result.words, document.getElementById('detailWordCloud'), 'group', window.currentGroupChatId, groupName);
     }
   } catch (error) {
     console.error('Error loading group chat words:', error);
@@ -2716,7 +2793,7 @@ async function handleContactDetailYearChange(year) {
         document.getElementById('detailFirstMessage').textContent = firstDate;
         document.getElementById('detailMostActiveYear').textContent = stats.mostActiveYear || '-';
         document.getElementById('detailAvgPerDay').textContent = `${stats.avgPerDay} texts/day`;
-        document.getElementById('detailLongestStreak').textContent = stats.longestStreak ? `${stats.longestStreak} days` : '-';
+        document.getElementById('detailLongestStreak').innerHTML = formatStreakDisplay(stats.longestStreak, stats.longestStreakStart, stats.longestStreakEnd);
         
         // Update chart - filter to show only selected year if year is specified
         let chartData = stats.messagesByYear;
@@ -2812,7 +2889,7 @@ async function showContactDetail(contact) {
     `;
     loadingOverlay.innerHTML = `
       <div style="text-align: center;">
-        <img src="icon.png" alt="Loading" style="width: 80px; height: 80px; animation: bounce 2s ease-in-out infinite;">
+        <img src="icon.png" alt="Loading" style="width: 80px; height: 80px; animation: float 2s ease-in-out infinite;">
       </div>
     `;
     document.body.appendChild(loadingOverlay);
@@ -2976,20 +3053,12 @@ function loadContactDetailStats(stats, words, emojis, contactName) {
   document.getElementById('detailAvgPerDay').textContent = `${stats.avgPerDay} texts/day`;
   
   // Display longest streak
-  document.getElementById('detailLongestStreak').textContent = stats.longestStreak ? `${stats.longestStreak} days` : '-';
+  document.getElementById('detailLongestStreak').innerHTML = formatStreakDisplay(stats.longestStreak, stats.longestStreakStart, stats.longestStreakEnd);
   
   // Word cloud
   const wordCloud = document.getElementById('detailWordCloud');
-  wordCloud.innerHTML = '';
-  
-  if (words && words.length > 0) {
-    words.forEach((word, index) => {
-      const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
-      wordCloud.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
-    });
-  } else {
-    wordCloud.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
-  }
+  const contactHandle = Array.isArray(currentContactHandle) ? currentContactHandle[0] : currentContactHandle;
+  renderWordCloud(words, wordCloud, 'contact', contactHandle, contactName);
   
   // Emoji stats
   const emojiStats = document.getElementById('detailEmojiStats');
@@ -3141,15 +3210,24 @@ async function loadGroupChatReactions(chatId, personId = 'all', year = null) {
 function createContactMessagesChart(messagesByYear) {
   const canvas = document.getElementById('detailMessagesChart');
   const ctx = canvas.getContext('2d');
-  
+
   // Destroy existing chart if any
   if (charts.contactDetail) {
     charts.contactDetail.destroy();
   }
-  
-  // Prepare data
-  const years = messagesByYear.map(row => row.year);
-  const counts = messagesByYear.map(row => row.count);
+
+  // Create a map of existing data
+  const dataByYear = {};
+  messagesByYear.forEach(row => {
+    dataByYear[row.year] = row.count;
+  });
+
+  // Get all years from global range, fallback to data years if not available
+  let years = getAllYearsRange();
+  if (!years || years.length === 0) {
+    years = messagesByYear.map(row => row.year).sort();
+  }
+  const counts = years.map(year => dataByYear[year] || 0);
   
   charts.contactDetail = new Chart(ctx, {
     type: 'line',
@@ -3418,22 +3496,18 @@ async function handleWordFilterChange(filter) {
   if (!currentContactHandle) {
     return;
   }
-  
+
   try {
     const result = await window.electronAPI.getContactWordsFiltered(currentContactHandle, filter, 15);
-    
+
     if (result.success && result.words) {
       const wordCloud = document.getElementById('detailWordCloud');
-      wordCloud.innerHTML = '';
-      
-      if (result.words.length > 0) {
-        result.words.forEach((word, index) => {
-          const sizeClass = index < 3 ? 'size-1' : index < 6 ? 'size-2' : index < 10 ? 'size-3' : 'size-4';
-          wordCloud.innerHTML += `<span class="word-item ${sizeClass}">${word.word}</span>`;
-        });
-      } else {
-        wordCloud.innerHTML = '<p style="color: var(--medium-gray); text-align: center;">Not enough messages to analyze</p>';
-      }
+      // Get contact name for the modal
+      const detailContactName = document.getElementById('detailContactName');
+      const contactName = detailContactName ? detailContactName.textContent : 'Contact';
+      const contactHandle = Array.isArray(currentContactHandle) ? currentContactHandle[0] : currentContactHandle;
+
+      renderWordCloud(result.words, wordCloud, 'contact', contactHandle, contactName);
     }
   } catch (error) {
     console.error('Error loading filtered words:', error);
@@ -4169,6 +4243,603 @@ async function saveStatsImage() {
       console.error('Failed to save image:', err);
     }
   });
+}
+
+// ============================================
+// WORD USAGE MODAL
+// ============================================
+
+let wordUsageChart = null;
+let currentWordContext = null; // Store context for the word modal
+
+// Setup word modal event listeners
+function setupWordModal() {
+  const wordModal = document.getElementById('wordModal');
+  const wordModalOverlay = document.getElementById('wordModalOverlay');
+  const wordModalClose = document.getElementById('wordModalClose');
+
+  // Close modal handlers
+  if (wordModalClose) {
+    wordModalClose.addEventListener('click', closeWordModal);
+  }
+  if (wordModalOverlay) {
+    wordModalOverlay.addEventListener('click', closeWordModal);
+  }
+}
+
+function closeWordModal() {
+  const wordModal = document.getElementById('wordModal');
+  if (wordModal) {
+    wordModal.style.display = 'none';
+  }
+
+  // Destroy chart if exists
+  if (wordUsageChart) {
+    wordUsageChart.destroy();
+    wordUsageChart = null;
+  }
+
+  currentWordContext = null;
+}
+
+// Add click event listener to word items
+function makeWordClickable(wordElement, word, scope, scopeId, scopeName) {
+  wordElement.style.cursor = 'pointer';
+  wordElement.addEventListener('click', async () => {
+    // Capture current filter state when word is clicked
+    let filterInfo = { type: 'all', value: null };
+
+    if (scope === 'contact') {
+      // DM view - check which filter button is active
+      const activeFilterBtn = document.querySelector('.filter-btn[data-filter-type="word"].active');
+      if (activeFilterBtn) {
+        filterInfo.type = activeFilterBtn.dataset.filter; // 'both', 'you', or 'them'
+      }
+    } else if (scope === 'group') {
+      // Group chat view - check dropdown selector
+      const wordSelector = document.getElementById('wordPersonSelector');
+      if (wordSelector && wordSelector.value !== 'all') {
+        filterInfo.type = 'person';
+        filterInfo.value = wordSelector.value; // specific person ID
+      }
+    }
+
+    await openWordModal(word, scope, scopeId, scopeName, filterInfo);
+  });
+}
+
+// Open word modal and load data
+async function openWordModal(word, scope, scopeId, scopeName, filterInfo = { type: 'all', value: null }) {
+  const wordModal = document.getElementById('wordModal');
+  const wordModalWord = document.getElementById('wordModalWord');
+  const wordModalScope = document.getElementById('wordModalScope');
+
+  // Store context including the contact name for use in charts
+  currentWordContext = { word, scope, scopeId, scopeName, filterInfo };
+
+  // Set word title
+  if (wordModalWord) {
+    wordModalWord.textContent = word;
+  }
+
+  // Set scope description with filter info
+  if (wordModalScope) {
+    let scopeText = '';
+    if (scope === 'all') {
+      scopeText = 'Usage across all your messages';
+    } else if (scope === 'contact') {
+      // Get first name for display
+      const firstName = scopeName.split(' ')[0];
+      if (filterInfo.type === 'you') {
+        scopeText = `Your usage in conversation with ${firstName}`;
+      } else if (filterInfo.type === 'them') {
+        scopeText = `${firstName}'s usage in conversation`;
+      } else {
+        scopeText = `Usage in conversation with ${firstName}`;
+      }
+    } else if (scope === 'group') {
+      if (filterInfo.type === 'person' && filterInfo.value) {
+        // Get participant name
+        let participantHandles = {};
+        if (window.currentGroupChatId) {
+          const participantsResult = await window.electronAPI.getGroupChatParticipantHandles(window.currentGroupChatId);
+          if (participantsResult.success) {
+            participantHandles = participantsResult.handles;
+          }
+        }
+        const contactInfo = participantHandles[filterInfo.value];
+        const personName = contactInfo ? contactInfo.name : filterInfo.value;
+        const firstName = personName.split(' ')[0];
+        scopeText = `${firstName}'s usage in ${scopeName}`;
+      } else {
+        scopeText = `Usage in ${scopeName}`;
+      }
+    }
+    wordModalScope.textContent = scopeText;
+  }
+
+  // Show modal
+  if (wordModal) {
+    wordModal.style.display = 'flex';
+  }
+
+  // Load data
+  await loadWordUsageData(word, scope, scopeId, filterInfo, scopeName);
+  await loadCommonPhrases(word, scope, scopeId, filterInfo, scopeName);
+}
+
+// Load and display word usage over time
+async function loadWordUsageData(word, scope, scopeId, filterInfo = { type: 'all', value: null }, scopeName = '') {
+  try {
+    const result = await window.electronAPI.getWordUsageOverTime(word, scope, scopeId, filterInfo);
+
+    if (result.success && result.data && result.data.length > 0) {
+      displayWordUsageChart(result.data, word, scope, scopeId, filterInfo, scopeName);
+    } else {
+      // Show no data message
+      const chartContainer = document.querySelector('.word-modal-chart-container');
+      if (chartContainer) {
+        chartContainer.innerHTML = '<p style="text-align: center; color: var(--medium-gray); padding: 40px;">Not enough data to display usage over time</p>';
+      }
+    }
+  } catch (error) {
+    console.error('Error loading word usage data:', error);
+  }
+}
+
+// Display word usage chart
+async function displayWordUsageChart(data, word, scope, scopeId, filterInfo = { type: 'all', value: null }, scopeName = '') {
+  const canvas = document.getElementById('wordUsageChart');
+  if (!canvas) return;
+
+  // Destroy existing chart
+  if (wordUsageChart) {
+    wordUsageChart.destroy();
+  }
+
+  // Clear any existing legend and wrapper
+  const chartContainer = canvas.closest('.word-modal-chart-container');
+  if (chartContainer) {
+    const existingLegend = chartContainer.querySelector('.word-chart-legend');
+    const existingWrapper = chartContainer.querySelector('.word-chart-canvas-wrapper');
+
+    if (existingLegend) {
+      existingLegend.remove();
+    }
+
+    // If canvas is in a wrapper, move it back to container
+    if (existingWrapper && canvas.parentElement === existingWrapper) {
+      chartContainer.appendChild(canvas);
+      existingWrapper.remove();
+    }
+  }
+
+  const ctx = canvas.getContext('2d');
+
+  // Get all years from global range
+  let allYears = getAllYearsRange();
+  if (!allYears || allYears.length === 0) {
+    // Fallback: extract years from data
+    const dataYears = data.map(d => d.year).filter(y => y);
+    allYears = [...new Set(dataYears)].sort();
+  }
+
+  // Prepare data based on scope and filter
+  let labels = [];
+  let datasets = [];
+
+  if (scope === 'contact') {
+    // Use all years from database
+    labels = allYears;
+
+    // Create a map of existing data
+    const dataByYear = {};
+    data.forEach(d => {
+      dataByYear[d.year] = d;
+    });
+
+    // Get first name for legend
+    const firstName = scopeName.split(' ')[0];
+
+    // Get contact photo for DM contact
+    let contactPhoto = null;
+    if (scopeId) {
+      const contactInfoResult = await window.electronAPI.getContactInfo(scopeId);
+      if (contactInfoResult.success && contactInfoResult.info) {
+        contactPhoto = contactInfoResult.info.photo;
+      }
+    }
+
+    // If filter is applied, show only the filtered data
+    if (filterInfo.type === 'you') {
+      datasets = [
+        {
+          label: 'You',
+          data: labels.map(year => dataByYear[year]?.youCount || 0),
+          borderColor: 'rgba(26, 26, 26, 1)',
+          backgroundColor: 'rgba(26, 26, 26, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: null
+        }
+      ];
+    } else if (filterInfo.type === 'them') {
+      datasets = [
+        {
+          label: firstName,
+          data: labels.map(year => dataByYear[year]?.themCount || 0),
+          borderColor: 'rgba(102, 102, 102, 1)',
+          backgroundColor: 'rgba(102, 102, 102, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: contactPhoto
+        }
+      ];
+    } else {
+      // Show both
+      datasets = [
+        {
+          label: 'You',
+          data: labels.map(year => dataByYear[year]?.youCount || 0),
+          borderColor: 'rgba(26, 26, 26, 1)',
+          backgroundColor: 'rgba(26, 26, 26, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: null
+        },
+        {
+          label: firstName,
+          data: labels.map(year => dataByYear[year]?.themCount || 0),
+          borderColor: 'rgba(102, 102, 102, 1)',
+          backgroundColor: 'rgba(102, 102, 102, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: contactPhoto
+        }
+      ];
+    }
+  } else if (scope === 'group') {
+    // Get participant handles to map to names
+    let participantHandles = {};
+    if (window.currentGroupChatId) {
+      const participantsResult = await window.electronAPI.getGroupChatParticipantHandles(window.currentGroupChatId);
+      if (participantsResult.success) {
+        participantHandles = participantsResult.handles;
+      }
+    }
+
+    // If filtering by specific person, show only that person's data
+    if (filterInfo.type === 'person' && filterInfo.value) {
+      // Filter data for specific person or 'you'
+      const targetPerson = filterInfo.value;
+      const filteredData = data.filter(item => item.person === targetPerson);
+
+      // Use all years from database
+      labels = allYears;
+
+      const yearData = {};
+      filteredData.forEach(item => {
+        yearData[item.year] = item.count;
+      });
+
+      let personLabel;
+      let personPhoto = null;
+      if (targetPerson === 'you') {
+        personLabel = 'You';
+      } else {
+        // Get contact name and extract first name
+        const contactInfo = participantHandles[targetPerson];
+        const fullName = contactInfo ? contactInfo.name : targetPerson;
+        personPhoto = contactInfo ? contactInfo.photo : null;
+        personLabel = fullName.split(' ')[0];
+      }
+
+      datasets = [
+        {
+          label: personLabel,
+          data: labels.map(year => yearData[year] || 0),
+          borderColor: 'rgba(26, 26, 26, 1)',
+          backgroundColor: 'rgba(26, 26, 26, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: personPhoto
+        }
+      ];
+    } else {
+      // Show all people
+      // Group data by year and person
+      const yearPersonData = {};
+      const allPeople = new Set();
+
+      data.forEach(item => {
+        allPeople.add(item.person);
+        if (!yearPersonData[item.year]) {
+          yearPersonData[item.year] = {};
+        }
+        yearPersonData[item.year][item.person] = item.count;
+      });
+
+      // Use all years from database
+      labels = allYears;
+
+      // Define colors for different people
+      const colors = [
+        { border: 'rgba(26, 26, 26, 1)', bg: 'rgba(26, 26, 26, 0.1)' }, // You (black)
+        { border: 'rgba(102, 102, 102, 1)', bg: 'rgba(102, 102, 102, 0.1)' }, // Gray
+        { border: 'rgba(59, 130, 246, 1)', bg: 'rgba(59, 130, 246, 0.1)' }, // Blue
+        { border: 'rgba(239, 68, 68, 1)', bg: 'rgba(239, 68, 68, 0.1)' }, // Red
+        { border: 'rgba(34, 197, 94, 1)', bg: 'rgba(34, 197, 94, 0.1)' }, // Green
+        { border: 'rgba(168, 85, 247, 1)', bg: 'rgba(168, 85, 247, 0.1)' }, // Purple
+        { border: 'rgba(249, 115, 22, 1)', bg: 'rgba(249, 115, 22, 0.1)' }, // Orange
+        { border: 'rgba(236, 72, 153, 1)', bg: 'rgba(236, 72, 153, 0.1)' }, // Pink
+      ];
+
+      // Create datasets for each person
+      const peopleArray = Array.from(allPeople);
+      peopleArray.forEach((person, index) => {
+        let personLabel;
+        let personPhoto = null;
+
+        if (person === 'you') {
+          personLabel = 'You';
+        } else {
+          // Get contact info from participantHandles
+          const contactInfo = participantHandles[person];
+          const fullName = contactInfo ? contactInfo.name : person;
+          personPhoto = contactInfo ? contactInfo.photo : null;
+          // Extract first name only
+          personLabel = fullName.split(' ')[0];
+        }
+
+        const colorIndex = person === 'you' ? 0 : (index % colors.length);
+        const color = colors[colorIndex];
+
+        datasets.push({
+          label: personLabel,
+          data: labels.map(year => yearPersonData[year]?.[person] || 0),
+          borderColor: color.border,
+          backgroundColor: color.bg,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          personPhoto: personPhoto  // Store photo for legend plugin
+        });
+      });
+    }
+  } else {
+    // Show single line for all messages by year
+    labels = allYears;
+
+    // Create a map of existing data
+    const dataByYear = {};
+    data.forEach(d => {
+      dataByYear[d.year] = d.count;
+    });
+
+    datasets = [
+      {
+        label: 'Usage Count',
+        data: labels.map(year => dataByYear[year] || 0),
+        borderColor: 'rgba(26, 26, 26, 1)',
+        backgroundColor: 'rgba(26, 26, 26, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4
+      }
+    ];
+  }
+
+  // Create custom HTML legend if any dataset has personPhoto property (for DMs and group chats)
+  const hasPhotos = datasets.some(d => 'personPhoto' in d);
+  if (hasPhotos && datasets.length > 0) {
+    const legendContainer = document.createElement('div');
+    legendContainer.className = 'word-chart-legend';
+    legendContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; justify-content: center;';
+
+    datasets.forEach((dataset) => {
+      const legendItem = document.createElement('div');
+      legendItem.style.cssText = 'display: flex; align-items: center; gap: 8px; cursor: pointer;';
+
+      // Create circular image or initials avatar
+      if (dataset.personPhoto) {
+        const img = document.createElement('img');
+        img.src = dataset.personPhoto;
+        img.style.cssText = `width: 24px; height: 24px; border-radius: 50%; border: 2px solid ${dataset.borderColor}; object-fit: cover;`;
+        legendItem.appendChild(img);
+      } else {
+        // Create initials avatar with SVG
+        const initials = getInitials(dataset.label);
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '24');
+        svg.setAttribute('height', '24');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.style.cssText = `border-radius: 50%; border: 2px solid ${dataset.borderColor};`;
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '12');
+        circle.setAttribute('cy', '12');
+        circle.setAttribute('r', '12');
+        circle.setAttribute('fill', 'var(--black)');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '12');
+        text.setAttribute('y', '12');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', 'white');
+        text.setAttribute('font-size', '10');
+        text.setAttribute('font-weight', '700');
+        text.textContent = initials;
+
+        svg.appendChild(circle);
+        svg.appendChild(text);
+        legendItem.appendChild(svg);
+      }
+
+      // Add label
+      const label = document.createElement('span');
+      label.textContent = dataset.label;
+      label.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--black);';
+      legendItem.appendChild(label);
+
+      legendContainer.appendChild(legendItem);
+    });
+
+    // Insert legend and wrap canvas
+    const chartContainer = canvas.closest('.word-modal-chart-container');
+
+    // Wrap canvas in a fixed-height container
+    const canvasWrapper = document.createElement('div');
+    canvasWrapper.className = 'word-chart-canvas-wrapper';
+    canvasWrapper.style.cssText = 'position: relative; height: 240px; width: 100%;';
+
+    chartContainer.appendChild(canvasWrapper);
+    canvasWrapper.appendChild(canvas);
+
+    // Insert legend at the beginning of chartContainer
+    chartContainer.insertBefore(legendContainer, chartContainer.firstChild);
+  }
+
+  wordUsageChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          top: 10,
+          right: 10,
+          bottom: 10,
+          left: 10
+        }
+      },
+      plugins: {
+        legend: {
+          display: !hasPhotos && (scope === 'contact' || (scope === 'all' && datasets.length > 1)),
+          position: 'top',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 15,
+            font: {
+              size: 13,
+              weight: '600'
+            }
+          }
+        },
+        title: {
+          display: false
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0
+          }
+        },
+        x: {
+          ticks: {
+            maxRotation: 0,
+            minRotation: 0
+          }
+        }
+      }
+    }
+  });
+}
+
+// Load and display common phrases
+async function loadCommonPhrases(word, scope, scopeId, filterInfo = { type: 'all', value: null }, scopeName = '') {
+  try {
+    const result = await window.electronAPI.getCommonPhrases(word, scope, scopeId, 10, filterInfo);
+
+    const phrasesList = document.getElementById('wordPhrasesList');
+    if (!phrasesList) return;
+
+    phrasesList.innerHTML = '';
+
+    if (result.success && result.phrases && result.phrases.length > 0) {
+      // For group chats, we need to get participant info
+      let participantHandles = {};
+      if (scope === 'group' && scopeId) {
+        const participantsResult = await window.electronAPI.getGroupChatParticipantHandles(scopeId);
+        if (participantsResult.success) {
+          participantHandles = participantsResult.handles;
+        }
+      }
+
+      result.phrases.forEach((phrase, index) => {
+        const phraseItem = document.createElement('div');
+        phraseItem.className = 'word-phrase-item';
+        phraseItem.style.animationDelay = `${index * 0.05}s`;
+
+        let senderLabel = '';
+        if (scope === 'all') {
+          senderLabel = phrase.isFromMe ? 'You' : 'Others';
+        } else if (scope === 'contact') {
+          // Use contact name instead of "Them"
+          const firstName = scopeName.split(' ')[0];
+          senderLabel = phrase.isFromMe ? 'You' : firstName;
+        } else if (scope === 'group') {
+          if (phrase.isFromMe) {
+            senderLabel = 'You';
+          } else if (phrase.senderHandle && participantHandles[phrase.senderHandle]) {
+            // Use first name for group chat participants
+            const contactInfo = participantHandles[phrase.senderHandle];
+            const fullName = contactInfo.name || phrase.senderHandle;
+            senderLabel = fullName.split(' ')[0];
+          } else {
+            senderLabel = phrase.senderHandle || 'Unknown';
+          }
+        }
+
+        const senderClass = phrase.isFromMe ? 'from-me' : 'from-them';
+
+        // Format frequency text nicely
+        let frequencyText;
+        if (phrase.frequency === 1) {
+          frequencyText = 'Said once';
+        } else if (phrase.frequency === 2) {
+          frequencyText = 'Said twice';
+        } else if (phrase.frequency < 10) {
+          frequencyText = `Said ${phrase.frequency} times`;
+        } else {
+          frequencyText = `Said ${phrase.frequency.toLocaleString()} times`;
+        }
+
+        phraseItem.innerHTML = `
+          <div class="word-phrase-header">
+            <span class="word-phrase-sender ${senderClass}">${senderLabel}</span>
+            <span class="word-phrase-frequency">${frequencyText}</span>
+          </div>
+          <div class="word-phrase-text">${escapeHtml(phrase.text)}</div>
+        `;
+
+        phrasesList.appendChild(phraseItem);
+      });
+    } else {
+      phrasesList.innerHTML = '<p style="text-align: center; color: var(--medium-gray); padding: 40px;">No common phrases found</p>';
+    }
+  } catch (error) {
+    console.error('Error loading common phrases:', error);
+  }
+}
+
+// Utility function to escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // Start the app when DOM is ready
