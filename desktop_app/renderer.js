@@ -149,7 +149,7 @@ async function init() {
         // Set fallback version
         const versionTag = document.getElementById('versionTag');
         if (versionTag) {
-          versionTag.textContent = 'v1.0.0';
+          versionTag.textContent = 'v1.0.1';
         }
       }
     }
@@ -198,7 +198,7 @@ function setupUpdateListeners() {
   
   // Update now button - redirect to remess.me
   updateNowBtn.addEventListener('click', async () => {
-    await window.electron.openURL('https://remess.me');
+    await window.electron.openURL('https://remess.me/?update');
   });
   
   // Later button
@@ -740,7 +740,7 @@ async function loadRealData() {
               cursor: pointer;
             `;
             notice.innerHTML = `
-              <strong>Update v1.0.0</strong><br>
+              <strong>Update v1.0.1</strong><br>
               New features and improvements available<br>
               <span style="color: var(--blue); text-decoration: underline; margin-top: 8px; display: inline-block;">Install Now</span>
             `;
