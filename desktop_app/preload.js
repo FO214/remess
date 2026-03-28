@@ -8,8 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (event, percent) => callback(percent)),
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', () => callback()),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  // Google Sign-In
-  signInWithGoogle: () => ipcRenderer.invoke('google-signin'),
   // Database operations
   checkDiskAccess: () => ipcRenderer.invoke('check-disk-access'),
   cloneDatabase: () => ipcRenderer.invoke('clone-database'),

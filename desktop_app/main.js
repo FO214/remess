@@ -12,7 +12,6 @@ autoUpdater.logger = log;
 // For unsigned builds, users will need to manually download updates
 // or use the "Remove quarantine" workaround for each update
 
-const { authenticateWithAuth0 } = require('./auth-auth0');
 const dbHandler = require('./db-handler');
 
 let mainWindow;
@@ -126,19 +125,6 @@ app.on('window-all-closed', () => {
 // Get app version
 ipcMain.handle('get-version', () => {
   return app.getVersion();
-});
-
-ipcMain.handle('google-signin', async () => {
-  try {
-    log.info('Starting authentication...');
-    const authResult = await authenticateWithAuth0();
-    log.info('Authentication successful');
-    return { success: true, data: authResult };
-  } catch (error) {
-    log.error('Authentication error:', error);
-    console.error('Authentication error:', error);
-    return { success: false, error: error.message };
-  }
 });
 
 // Check Full Disk Access

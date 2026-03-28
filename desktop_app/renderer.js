@@ -57,8 +57,8 @@ const sampleData = {
 };
 
 // State
-let isAuthenticated = false;
-let userData = null;
+let isAuthenticated = true;
+let userData = { name: 'incognito', email: 'nobody@remess.me', avatar: null };
 let charts = {};
 let availableYears = [];
 let currentContactHandle = null;
@@ -67,7 +67,6 @@ let currentContactsView = 'dms'; // Track if showing DMs or groups
 
 // DOM Elements
 const landingContainer = document.getElementById('landingContainer');
-const authContainer = document.getElementById('authContainer');
 const permissionsContainer = document.getElementById('permissionsContainer');
 const importContainer = document.getElementById('importContainer');
 const loadingContainer = document.getElementById('loadingContainer');
@@ -75,13 +74,6 @@ const wrappedContainer = document.getElementById('wrappedContainer');
 const dashboardContainer = document.getElementById('dashboardContainer');
 const contactDetailContainer = document.getElementById('contactDetailContainer');
 const getStartedBtn = document.getElementById('getStartedBtn');
-const backToLandingBtn = document.getElementById('backToLandingBtn');
-const googleSignInBtn = document.getElementById('googleSignInBtn');
-const signOutBtn = document.getElementById('signOutBtn');
-const userName = document.getElementById('userName');
-const userAvatar = document.getElementById('userAvatar');
-const userProfile = document.getElementById('userProfile');
-const profileDropdown = document.getElementById('profileDropdown');
 const backToDashboardBtn = document.getElementById('backToDashboardBtn');
 
 // Permissions elements
@@ -210,25 +202,7 @@ function setupUpdateListeners() {
 // Setup event listeners
 function setupEventListeners() {
   getStartedBtn.addEventListener('click', handleGetStarted);
-  backToLandingBtn.addEventListener('click', showLandingScreen);
-  googleSignInBtn.addEventListener('click', handleGoogleSignIn);
-  signOutBtn.addEventListener('click', handleSignOut);
   backToDashboardBtn.addEventListener('click', () => showDashboard(true));
-  
-  // Profile dropdown toggle
-  userProfile.addEventListener('click', (e) => {
-    e.stopPropagation();
-    userProfile.classList.toggle('active');
-    profileDropdown.classList.toggle('active');
-  });
-  
-  // Close dropdown when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!userProfile.contains(e.target) && !profileDropdown.contains(e.target)) {
-      userProfile.classList.remove('active');
-      profileDropdown.classList.remove('active');
-    }
-  });
   
   // Refresh data button
   const refreshDataBtn = document.getElementById('refreshDataBtn');
@@ -361,144 +335,21 @@ function setupEventListeners() {
   });
 }
 
-// Handle Get Started button - auto-proceed if already authenticated
+// Handle Get Started button - go directly to data loading
 async function handleGetStarted() {
-  if (isAuthenticated && userData) {
-    // User is already signed in, auto-load data
-    landingContainer.style.display = 'none';
-    loadingContainer.style.display = 'flex';
-    
-    const hasSeenWrapped = localStorage.getItem('remess_seen_wrapped');
-    
-    await checkAndLoadData();
-    loadingContainer.style.display = 'none';
-    
-    // Show appropriate screen based on whether they've seen wrapped
-    if (hasSeenWrapped) {
-      showDashboard();
-    } else {
-      showWrappedExperience();
-    }
-  } else {
-    // User needs to sign in
-    showAuthScreen();
-  }
-}
-
-// Show auth screen
-function showAuthScreen() {
   landingContainer.style.display = 'none';
-  authContainer.style.display = 'flex';
+  loadingContainer.style.display = 'flex';
+  await checkAndLoadData();
 }
 
 // Show landing screen
 function showLandingScreen() {
-  authContainer.style.display = 'none';
   landingContainer.style.display = 'flex';
 }
 
-// Check authentication status
+// Check authentication status - auth removed, go straight to landing
 async function checkAuthStatus() {
-  // Check if user was previously authenticated (using localStorage)
-  const savedUser = localStorage.getItem('remess_user');
-  const savedTokens = localStorage.getItem('remess_auth_tokens');
-
-  if (savedUser && savedTokens) {
-    try {
-      userData = JSON.parse(savedUser);
-      const tokens = JSON.parse(savedTokens);
-
-      // Check if tokens are still valid (7 days = 604800000 ms)
-      const tokenAge = Date.now() - (tokens.timestamp || 0);
-      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-      if (tokenAge < maxAge) {
-        // Tokens are still valid, user is authenticated
-        isAuthenticated = true;
-
-        // Skip landing page and go directly to loading/dashboard
-        landingContainer.style.display = 'none';
-        authContainer.style.display = 'none';
-        loadingContainer.style.display = 'flex';
-        await checkAndLoadData();
-        return;
-      } else {
-        // Tokens expired, clear them
-        localStorage.removeItem('remess_user');
-        localStorage.removeItem('remess_auth_tokens');
-        localStorage.removeItem('remess_seen_wrapped');
-        isAuthenticated = false;
-        userData = null;
-      }
-    } catch (error) {
-      console.error('Error restoring session:', error);
-      localStorage.removeItem('remess_user');
-      localStorage.removeItem('remess_auth_tokens');
-      isAuthenticated = false;
-      userData = null;
-    }
-  }
-
-  // Show landing page if not authenticated
   landingContainer.style.display = 'flex';
-}
-
-// Handle Google Sign In
-async function handleGoogleSignIn() {
-  googleSignInBtn.innerHTML = '<span>Signing in...</span>';
-  googleSignInBtn.disabled = true;
-  
-  try {
-    // Check if we have real Google OAuth configured
-    if (window.electronAPI && window.electronAPI.signInWithGoogle) {
-      // Real Google OAuth
-      const result = await window.electronAPI.signInWithGoogle();
-      
-      
-      if (result.success) {
-        // Get user data from Auth0 result
-        const authUser = result.data.user; // The user object from auth-auth0.js
-        const tokens = result.data.tokens; // The tokens from Auth0
-        
-        userData = {
-          name: authUser?.name || authUser?.email || 'User',
-          email: authUser?.email || 'user@example.com',
-          avatar: authUser?.avatar || authUser?.picture || null
-        };
-        isAuthenticated = true;
-        
-        
-        // Save to localStorage with timestamp
-        localStorage.setItem('remess_user', JSON.stringify(userData));
-        localStorage.setItem('remess_auth_tokens', JSON.stringify({
-          ...tokens,
-          timestamp: Date.now()
-        }));
-        
-        // Check Full Disk Access and load data
-        authContainer.style.display = 'none';
-        loadingContainer.style.display = 'flex';
-        await checkAndLoadData();
-      } else {
-        throw new Error(result.error || 'Authentication failed');
-      }
-    } else {
-      console.error('Sign-in not available - authentication required');
-      showAuthScreen();
-    }
-  } catch (error) {
-    console.error('Sign in error:', error);
-    alert('Failed to sign in. Please try again.');
-    
-    // Reset button
-    googleSignInBtn.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="currentColor"/>
-      </svg>
-      <span>Sign In</span>
-    `;
-    googleSignInBtn.disabled = false;
-  }
 }
 
 // Check disk access and load data
@@ -519,7 +370,6 @@ async function checkAndLoadData() {
         
         // Skip import screen and go straight to loading
         loadingContainer.style.display = 'flex';
-        authContainer.style.display = 'none';
         await loadRealData();
       } else {
         // No contacts yet, show import screen
@@ -528,14 +378,13 @@ async function checkAndLoadData() {
     }
   } catch (error) {
     console.error('Error checking disk access:', error);
-    showAuthScreen();
+    showLandingScreen();
   }
 }
 
 // Show import contacts screen
 function showImportScreen() {
   landingContainer.style.display = 'none';
-  authContainer.style.display = 'none';
   loadingContainer.style.display = 'none';
   permissionsContainer.style.display = 'none';
   importContainer.style.display = 'flex';
@@ -780,14 +629,13 @@ async function loadRealData() {
     }
   } catch (error) {
     console.error('❌ Error loading real data:', error);
-    showAuthScreen();
+    showLandingScreen();
   }
 }
 
 // Show permissions screen
 function showPermissionsScreen() {
   landingContainer.style.display = 'none';
-  authContainer.style.display = 'none';
   loadingContainer.style.display = 'none';
   permissionsContainer.style.display = 'flex';
   wrappedContainer.style.display = 'none';
@@ -826,23 +674,16 @@ async function handleCheckAccess() {
   }
 }
 
-// Handle Sign Out
-function handleSignOut() {
-  // Clear authentication and tokens
-  isAuthenticated = false;
-  userData = null;
-  localStorage.removeItem('remess_user');
-  localStorage.removeItem('remess_auth_tokens');
+// Handle Reset - clear data and go back to landing
+function handleReset() {
   localStorage.removeItem('remess_seen_wrapped');
   localStorage.removeItem('remess_contacts');
   
   // Clear global contacts cache
   window.remessContacts = null;
   
-  
-  // Close dropdown
-  userProfile.classList.remove('active');
-  profileDropdown.classList.remove('active');
+  // Reset userData stats
+  userData = { name: 'User', email: '', avatar: null };
   
   // Destroy charts
   Object.values(charts).forEach(chart => chart.destroy());
@@ -853,20 +694,10 @@ function handleSignOut() {
   
   // Show landing screen
   landingContainer.style.display = 'flex';
-  authContainer.style.display = 'none';
   permissionsContainer.style.display = 'none';
   loadingContainer.style.display = 'none';
   dashboardContainer.style.display = 'none';
   wrappedContainer.style.display = 'none';
-  
-  // Reset sign in button
-  googleSignInBtn.innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="currentColor"/>
-    </svg>
-    <span>Sign In</span>
-  `;
-  googleSignInBtn.disabled = false;
 }
 
 // Handle refresh data
@@ -952,7 +783,6 @@ async function handleReuploadCsv() {
 
 // Show wrapped experience
 function showWrappedExperience() {
-  authContainer.style.display = 'none';
   loadingContainer.style.display = 'none';
   permissionsContainer.style.display = 'none';
   wrappedContainer.style.display = 'block';
@@ -976,7 +806,7 @@ function showWrappedExperience() {
 async function loadWrappedData() {
   if (!userData?.stats || !userData?.topContacts) {
     console.error('No user data available');
-    showAuthScreen();
+    showLandingScreen();
     return;
   }
   
@@ -1136,8 +966,6 @@ function skipToDashboard() {
 
 // Show dashboard with data
 function showDashboard(skipLoad = false) {
-  // Hide auth and wrapped, show dashboard
-  authContainer.style.display = 'none';
   permissionsContainer.style.display = 'none';
   wrappedContainer.style.display = 'none';
   contactDetailContainer.style.display = 'none';
@@ -1147,31 +975,12 @@ function showDashboard(skipLoad = false) {
   if (skipLoad) {
     loadingContainer.style.display = 'none';
   } else {
-    // Keep loading screen visible until dashboard data is loaded
     loadingContainer.style.display = 'flex';
   }
 
   // Restore the year selector value
   if (topContactsYearSelector) {
     topContactsYearSelector.value = currentDashboardYear;
-  }
-
-  // Update user info from Auth0 - always show name and avatar
-  const displayName = userData?.name || userData?.email || 'User';
-  userName.textContent = displayName;
-
-  // Set Auth0 profile picture
-  if (userData?.avatar) {
-    userAvatar.src = userData.avatar;
-    userAvatar.style.display = 'block';
-    userAvatar.style.objectFit = 'cover';
-    userAvatar.onerror = function() {
-      // Fallback: hide image and show initials in CSS
-      this.style.display = 'none';
-    };
-  } else {
-    // No avatar provided
-    userAvatar.style.display = 'none';
   }
 
   // Load dashboard data only if not skipping
@@ -1184,7 +993,7 @@ function showDashboard(skipLoad = false) {
 async function loadDashboardData() {
   if (!userData?.stats || !userData?.topContacts || !userData?.messagesByYear) {
     console.error('No user data available');
-    showAuthScreen();
+    showLandingScreen();
     return;
   }
   
@@ -3691,7 +3500,7 @@ async function generateStatsCard() {
   }
 
   // Title - top left with user's first name
-  const firstName = userData?.name ? userData.name.split(' ')[0] : 'My';
+  const firstName = (userData?.name && userData.name !== 'User') ? userData.name.split(' ')[0] : 'My';
   ctx.fillStyle = '#1a1a1a';
   ctx.font = '700 56px -apple-system, BlinkMacSystemFont, Inter';
   ctx.textAlign = 'left';
